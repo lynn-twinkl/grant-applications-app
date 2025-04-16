@@ -24,6 +24,7 @@ def extract_needs(docs, max_concurrency: int = 10) -> List[List[str]]:
                 - Output the extracted items as a **clean, comma-separated list**, with no additional explanation or formatting.
                 - Do not include abstract goals or general program names (e.g., "Arts Award program" or "student development").
                 - Focus on concrete nouns that represent resources or services the grant would directly fund (e.g., "paint", "laptops", "counseling sessions", "sports equipment").
+                - If no tangible items or clearly defined services are found according to the spcifications above, simply return None.
 
                 ## Example:
 
