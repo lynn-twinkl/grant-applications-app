@@ -28,7 +28,7 @@ LEXICON = {
         "improve", "amazing", "difference", "dream", "opportunity",
         "empower", "nurture", "change", "impact", "grateful", "please",
         "!", 'passion', 'passionate', 'committed', 'life-changing',
-        'thank you', 'thankful'
+        'thank you', 'thankful', 'love'
     ],
     "superlatives": [
         "most", "every", "all", "huge", "massive", "dramatically",
@@ -87,7 +87,7 @@ def compute_necessity(text):
             totals['urgency_score'] += category_count
         elif category == "severity_markers":
             totals['severity_score'] += category_count
-        elif category == "vulnerability__markers":
+        elif category == "vulnerability_markers":
             totals['vulnerability_score'] += category_count
 
     return pd.Series(totals)
