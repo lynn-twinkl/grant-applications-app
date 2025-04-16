@@ -30,25 +30,24 @@ if uploaded_file is not None:
 
     st.dataframe(df)
 
-    ## 0. PREPROCESSING
+    ## ------- 0. PREPROCESSING ----------
 
     freeform_col = detect_freeform_answer_col(df) # <- detects the long-form column used for processing
 
     docs = df[freeform_col].to_list()
 
-    ## --------- 1. EXTRACT USAGE -------------
+    
+    ## -------- 1. ASSIGN NECESSITY INDEX ------------
 
-    """
+    df = df.join(df[freeform_col].apply(compute_necessity))
+
+
+    ## --------- 2. EXTRACT USAGE -------------
+
     with st.spinner("Extracting usage with AI...", show_time=True):
         extracted_usage = extract_usage(docs)
 
     df['Usage'] = extracted_usage
 
-    st.dataframe(df[[freeform_col, 'Usage']])
-
-    """
-    ## -------- 2. ASSIGN NECESSITY INDEX ------------
-
-    df = df.join(df[freeform_col].apply(compute_necessity))
-
     st.dataframe(df)
+
