@@ -1,23 +1,25 @@
+import pandas as pd
 import re
 
 # ---------------- MARKERS ----------------
 
 LEXICON = {
-    "urgency_markers": [
-        "urgent", "need", "shortage", "struggling", "challenge",
-        "emergency", "tight", "limited", "difficulties", "crisis",
-        "immediate", "critical", "necessary", "essential", "dire"
+    "urgency_markers": [ "urgent", "need", "shortage", "emergency", "limited", 
+        "difficulties", "crisis", "immediate", "critical", "necessary",
+        "essential", "dire", "catastrophe"
     ],
     "severity_markers": [
-        "trauma","difficult", "violence", "profound", "severe", "extreme",
-        "desperate", "worst", "suffering", "devastating", "harsh",
+        "trauma","difficult", "profound", "severe", "extreme", "struggling",
+        "desperate", "suffering", "devastating", "harsh", "violent", "challenge",
+        "danger"
     ],
+
     "vulnerability_markers": [
-        "asd", "send", "disability", "special needs", "diagnosis", "vulnerable",
+        "asd", "send", "disability", "disabilities", "special needs", "diagnosis", "vulnerable",
         "fragile", "risk", "sen", 'adhd','add','dyslexia', 'trans', 'queer',
         'lgbtq', 'refugee', 'refugees', 'autism', 'autisitc', 'neurodivergent',
         'low income', "poverty", "deprived", "poor", "disadvantaged", 'underserved',
-        'therapy', 'therapeutic', "aln"
+        'therapy', 'therapeutic', "aln", "semh", 'violence'
     ],
     "emotional_appeal": [
         "help", "support", "deserve", "hope", "lives", "transform",
@@ -49,11 +51,23 @@ WEIGHTS = {
 def compute_necessity(text):
 
     if not isinstance(text, str):
-        return 0.0
+        return pd.Series({
+            "necessity_index": 0.0,
+            "urgency_score": 0.0,
+            "severity_score": 0.0,
+            "vulnerability_score": 0.0,
+        })
 
     text_lower = text.lower()
 
-    score = 0.0
+    totals = {
+            "necessity_index" : 0.0,
+            "urgency_score" : 0.0,
+            "severity_score" : 0.0,
+            "vulnerability_score" : 0.0,
+            }
+
+
     for category, keywords in LEXICON.items():
         # For each keyword, count how many times it appears in text
         # (simple usage of re.findall)
@@ -63,8 +77,14 @@ def compute_necessity(text):
             pattern = r'\b' + re.escape(kw) + r'\b'
             matches = re.findall(pattern, text_lower)
             category_count += len(matches)
+    
+        totals['necessity_index'] += WEIGHTS[category] * category_count
 
-        # Weight the occurrences by the category weighting
-        score += WEIGHTS[category] * category_count
+        if category == "urgency_markers":
+            totals['urgency_score'] += category_count
+        elif category == "severity_markers":
+            totals['severity_score'] += category_count
+        elif category == "vulnerability__markers":
+            totals['vulnerability_score'] += category_count
 
-    return score
+    return pd.Series(totals)
