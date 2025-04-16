@@ -38,5 +38,10 @@ if uploaded_file is not None:
 
     ## 1. EXTRACT GRANT USAGE
 
-    extracted_usage = extract_usage(docs)
+    with st.spinner("Extracting usage with AI...", show_time=True):
+        extracted_usage = extract_usage(docs)
+
+    df['Usage'] = extracted_usage
+
+    st.dataframe(df)
 
