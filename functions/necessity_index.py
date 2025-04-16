@@ -4,7 +4,8 @@ import re
 # ---------------- MARKERS ----------------
 
 LEXICON = {
-    "urgency_markers": [ "urgent", "need", "shortage", "emergency", "limited", 
+    "urgency_markers": [
+        "urgent", "need", "shortage", "emergency", "limited", 
         "difficulties", "crisis", "immediate", "critical", "necessary",
         "essential", "dire", "catastrophe"
     ],
@@ -19,13 +20,15 @@ LEXICON = {
         "fragile", "risk", "sen", 'adhd','add','dyslexia', 'trans', 'queer',
         'lgbtq', 'refugee', 'refugees', 'autism', 'autisitc', 'neurodivergent',
         'low income', "poverty", "deprived", "poor", "disadvantaged", 'underserved',
-        'therapy', 'therapeutic', "aln", "semh", 'violence'
+        'therapy', 'therapeutic', "aln", "semh", 'violence', 'mental health', 'depressed',
+        'anxious', 'anxiety', 'ill', 'sick'
     ],
     "emotional_appeal": [
         "help", "support", "deserve", "hope", "lives", "transform",
         "improve", "amazing", "difference", "dream", "opportunity",
         "empower", "nurture", "change", "impact", "grateful", "please",
-        "!", 'passion', 'passionate', 'committeed', 'life-changing'
+        "!", 'passion', 'passionate', 'committed', 'life-changing',
+        'thank you', 'thankful'
     ],
     "superlatives": [
         "most", "every", "all", "huge", "massive", "dramatically",
@@ -38,8 +41,8 @@ LEXICON = {
 # --------------- WEIGHTS --------------
 
 WEIGHTS = {
-    'urgency_markers': 2.5,
-    'severity_markers': 2.0,
+    'urgency_markers': 3,
+    'severity_markers': 2.5,
     'vulnerability_markers': 3,
     'emotional_appeal': 1.5,
     'superlatives': 1.0
