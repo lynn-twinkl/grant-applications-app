@@ -36,7 +36,7 @@ if uploaded_file is not None:
 
     docs = df[freeform_col].to_list()
 
-    ## 1. EXTRACT USAGE
+    ## --------- 1. EXTRACT USAGE -------------
 
     """
     with st.spinner("Extracting usage with AI...", show_time=True):
@@ -47,7 +47,7 @@ if uploaded_file is not None:
     st.dataframe(df[[freeform_col, 'Usage']])
 
     """
-    ## 2. ASSIGN NECESSITY INDEX
+    ## -------- 2. ASSIGN NECESSITY INDEX ------------
 
     df = df.join(df[freeform_col].apply(compute_necessity))
 
