@@ -21,7 +21,7 @@ LEXICON = {
         'lgbtq', 'refugee', 'refugees', 'autism', 'autisitc', 'neurodivergent',
         'low income', "poverty", "deprived", "poor", "disadvantaged", 'underserved',
         'therapy', 'therapeutic', "aln", "semh", 'violence', 'mental health', 'depressed',
-        'anxious', 'anxiety', 'ill', 'sick'
+        'anxious', 'anxiety', 'ill', 'sick','down syndrome', 'epilepsy',
     ],
     "emotional_appeal": [
         "help", "support", "deserve", "hope", "lives", "transform",
