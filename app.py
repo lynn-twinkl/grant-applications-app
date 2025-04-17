@@ -38,7 +38,7 @@ def load_and_process(raw_csv: bytes) -> typing.Tuple[pd.DataFrame, str]:
 # APP SCRIPT
 ################################
 
-st.title("Grant Applications Helper")
+st.title("Community Collections Helper")
 
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv')
 
@@ -46,15 +46,10 @@ if uploaded_file is not None:
     # Read raw bytes for caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
     raw = uploaded_file.read()
 
-    st.markdown("""
-    ### Data Preview
-    Here's the data you uploaded!
-    """
-    )
-    df_orig = pd.read_csv(BytesIO(raw))
-    st.dataframe(df_orig)
-
-    st.divider()
+    with st.expander("Data Preview", icon='📊'):
+        st.markdown("Here's the data you uploaded")
+        df_orig = pd.read_csv(BytesIO(raw))
+        st.dataframe(df_orig)
 
     ## ---- PROCESSED DATA (CACHED) ----
 
@@ -77,7 +72,7 @@ if uploaded_file is not None:
     ## ---- NECESSITY INDEX CHART ----
 
     st.header("Processed Applications")
-    st.subheader("Necessity Index Distribution")
+    st.markdown("#### Necessity Index Distribution")
 
     with st.expander("Learn about our indexing algorithm", icon='🌱'):
         st.markdown(
@@ -112,7 +107,8 @@ if uploaded_file is not None:
     st.bar_chart(df['necessity_index'])
 
     # Review applications
-    st.subheader("Applications")
+    st.subheader("Filtered Applications")
+    st.markdown("To filter applications, use the app's side panel on the left-hand side.")
     for idx, row in filtered_df.iterrows():
         with st.expander(f"Application \#{idx} | Necessity: {row['necessity_index']:.1f}"):
             col1, col2 = st.columns((1, 3))
@@ -126,7 +122,12 @@ if uploaded_file is not None:
             col2.write(row[freeform_col])
             if usage_items:
                 col2.markdown("**EXTRACTED USAGE ITEMS:**")
-                col2.write(", ".join(usage_items))
+                # Display usage items as colored pills
+                pills_html = "".join(
+                    f"<span style='display:inline-block;background-color:#D7E0FB;color:#3C63C9;border-radius:20px;padding:4px 10px;margin:2px;'>{item}</span>"
+                    for item in usage_items
+                )
+                col2.markdown(pills_html, unsafe_allow_html=True)
             else:
                 col2.markdown("*No specific usage items extracted.*")
             # Shortlist checkbox
