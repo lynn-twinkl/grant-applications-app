@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 
 # ---------------- MARKERS ----------------
@@ -91,3 +92,12 @@ def compute_necessity(text):
             totals['vulnerability_score'] += category_count
 
     return pd.Series(totals)
+
+
+## -------- SCALING FUNCTION --------
+
+
+def index_scaler(values):
+    x_min = np.min(values)
+    x_max = np.max(values)
+    return [(x - x_min) / (x_max - x_min) if x_max != x_min else 0.5 for x in values]
