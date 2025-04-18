@@ -160,7 +160,6 @@ notes/
 data/
 *.json
 *.spacy
-ner-training/data/
 ner-training/roberta_model
 !README.md
 !readme.md
