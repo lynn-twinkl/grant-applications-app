@@ -4,6 +4,7 @@
 
 import streamlit as st
 import pandas as pd
+import altair as alt
 from io import BytesIO
 from streamlit_extras.metric_cards import style_metric_cards
 
@@ -127,5 +128,18 @@ if uploaded_file is not None:
         st.subheader("Necessity Index Distribution")
         st.write("")
         st.write("")
-        st.bar_chart(df['necessity_index'], color='#81bc4d')
+        # Histogram of necessity index colored by priority labels
+        chart = alt.Chart(df).mark_bar().encode(
+            x=alt.X('necessity_index:Q', bin=alt.Bin(maxbins=20), title='Necessity Index'),
+            y='count()',
+            color=alt.Color(
+                'priority:N',
+                scale=alt.Scale(
+                    domain=['low', 'medium', 'high', 'priority'],
+                    range=['#a7d6fd', '#FFA500', '#FF5733', '#FF0000']
+                ),
+                legend=alt.Legend(title='Priority')
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
         st.dataframe(df, hide_index=True)
