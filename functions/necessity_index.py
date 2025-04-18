@@ -101,3 +101,9 @@ def index_scaler(values):
     x_min = np.min(values)
     x_max = np.max(values)
     return [(x - x_min) / (x_max - x_min) if x_max != x_min else 0.5 for x in values]
+
+
+## -------- CATEGORIZE FUNCTION -------
+
+def qcut_labels(series, bins=(0,.25,.75,.95,1), labels=('low','medium','high','priority')):
+    return pd.qcut(series, q=bins, labels=labels)
