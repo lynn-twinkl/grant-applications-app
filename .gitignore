@@ -158,6 +158,7 @@ cython_debug/
 .DS_Store
 notes/
 *.json
+*.csv
 *.spacy
 *.md
 !README.md
