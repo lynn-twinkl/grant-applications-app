@@ -10,7 +10,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 # ---- FUNCTIONS ----
 
 from functions.extract_usage import extract_usage
-from functions.necessity_index import compute_necessity, index_scaler
+from functions.necessity_index import compute_necessity, index_scaler, qcut_labels
 from functions.column_detection import detect_freeform_answer_col
 import typing
 
@@ -26,9 +26,12 @@ def load_and_process(raw_csv: bytes) -> typing.Tuple[pd.DataFrame, str]:
     df_orig = pd.read_csv(BytesIO(raw_csv))
     # Detect freeform column
     freeform_col = detect_freeform_answer_col(df_orig)
+    #Word count
+    df_orig['word_count'] = df_orig[freeform_col].fillna('').str.split().str.len()
     # Compute necessity scores
     scored = df_orig.join(df_orig[freeform_col].apply(compute_necessity))
     scored['necessity_index'] = index_scaler(scored['necessity_index'].values)
+    scored['priority'] = qcut_labels(scored['necessity_index'])
     # LangChain function for extracting usage
     docs = df_orig[freeform_col].to_list()
     usage = extract_usage(docs)
@@ -52,24 +55,22 @@ if uploaded_file is not None:
     df, freeform_col = load_and_process(raw)
 
     ## ---- INTERACTIVE FILTERING & REVIEW INTERFACE ----
-    
+
+    st.sidebar.title("Filters")
+    min_idx = float(df['necessity_index'].min())
+    max_idx = float(df['necessity_index'].max())
+    filter_range = st.sidebar.slider(
+        "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
+    )
+    filtered_df = df[df['necessity_index'].between(filter_range[0], filter_range[1])]
+
+    # Sidebar summary
+    st.sidebar.markdown(f"**Total Applications:** {len(df)}")
+    st.sidebar.markdown(f"**Filtered Applications:** {len(filtered_df)}")
+
     tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
 
     with tab1:
-        st.sidebar.title("Filters")
-        min_idx = float(df['necessity_index'].min())
-        max_idx = float(df['necessity_index'].max())
-        filter_range = st.sidebar.slider(
-            "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
-        )
-        filtered_df = df[df['necessity_index'].between(filter_range[0], filter_range[1])]
-
-        # Sidebar summary
-        st.sidebar.markdown(f"**Total Applications:** {len(df)}")
-        st.sidebar.markdown(f"**Filtered Applications:** {len(filtered_df)}")
-
-        ## ---- NECESSITY INDEX CHART ----
-
         # Review applications
         st.subheader("Filtered Applications")
         st.markdown("To filter applications, use the app's side panel on the left-hand side.")
@@ -116,7 +117,15 @@ if uploaded_file is not None:
             )
 
     with tab2:
+        st.write("")
+
+        col1, col2 = st.columns(2)
+        col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
+        col2.metric("Total Applications", len(df))
+        st.html("<br>")
+
         st.subheader("Necessity Index Distribution")
+        st.write("")
         st.write("")
         st.bar_chart(df['necessity_index'], color='#81bc4d')
         st.dataframe(df, hide_index=True)
