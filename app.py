@@ -13,6 +13,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 from functions.extract_usage import extract_usage
 from functions.necessity_index import compute_necessity, index_scaler, qcut_labels
 from functions.column_detection import detect_freeform_answer_col
+from functions.shortlist import shortlist_applications
 import typing
 
 # ---- CACHEABLE PROCESSING ----
@@ -105,27 +106,47 @@ if uploaded_file is not None:
                     key=f"shortlist_{idx}"
                 )
 
-        # Shortlist summary and download
+        # Shortlist summary and download (manual)
         shortlisted = [
             i for i in filtered_df.index
             if st.session_state.get(f"shortlist_{i}", False)
         ]
-        st.sidebar.markdown(f"**Shortlisted:** {len(shortlisted)}")
+        st.sidebar.markdown(f"**Manual Shortlisted:** {len(shortlisted)}")
         if shortlisted:
             csv = df.loc[shortlisted].to_csv(index=False).encode('utf-8')
             st.sidebar.download_button(
-                "Download Shortlist", csv, "shortlist.csv", "text/csv"
+                "Download Manual Shortlist", csv, "shortlist.csv", "text/csv"
             )
+
+        # Automatic Shortlisting
+        st.sidebar.header("Automatic Shortlisting")
+        max_k = len(filtered_df)
+        default_k = min(5, max_k)
+        num_auto = st.sidebar.number_input(
+            "Number to shortlist automatically",
+            min_value=1, max_value=max_k,
+            value=default_k, step=1
+        )
+        if st.sidebar.button("Generate Auto Shortlist"):
+            auto_short = shortlist_applications(filtered_df, k=num_auto)
+            st.sidebar.markdown(f"**Auto Shortlisted:** {len(auto_short)}")
+            csv_auto = auto_short.to_csv(index=False).encode('utf-8')
+            st.sidebar.download_button(
+                "Download Auto Shortlist", csv_auto, "auto_shortlist.csv", "text/csv"
+            )
+            st.subheader("Auto Shortlist Results")
+            st.dataframe(auto_short, hide_index=True)
 
     with tab2:
         st.write("")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
-        col2.metric("Total Applications", len(df))
+        col2.metric("Median N.I", df['necessity_index'].median())
+        col3.metric("Total Applications", len(df))
         st.html("<br>")
 
-        st.subheader("Necessity Index Distribution")
+        st.subheader("Necessity Index (NI) Distribution")
         st.write("")
         st.write("")
         # Histogram of necessity index colored by priority labels
