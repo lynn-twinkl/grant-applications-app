@@ -163,6 +163,7 @@ data/
 ner-training/data/
 ner-training/roberta_model
 !README.md
+!readme.md
 *.md
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
