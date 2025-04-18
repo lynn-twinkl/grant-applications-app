@@ -156,14 +156,13 @@ cython_debug/
 
 #Local Files
 .DS_Store
-notes/
-data/
 *.json
+*.csv
 *.spacy
-ner-training/roberta_model
 !README.md
 !readme.md
 *.md
+ner-training/roberta_model
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
