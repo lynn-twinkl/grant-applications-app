@@ -58,6 +58,14 @@ if uploaded_file is not None:
 
     ## ---- INTERACTIVE FILTERING & REVIEW INTERFACE ----
 
+    st.sidebar.title("Shortlist Mode")
+    with st.sidebar:
+        mode = st.segmented_control(
+                "Select one option",
+                options=["strict", "generous"],
+                default="strict",
+                )
+
     st.sidebar.title("Filters")
     min_idx = float(df['necessity_index'].min())
     max_idx = float(df['necessity_index'].max())
@@ -73,9 +81,34 @@ if uploaded_file is not None:
     tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
 
     with tab1:
+        # Automatic Shortlisting Controls
+        st.header("✨ Automatic Shortlist")
+        
+
+        st.markdown("Here's your **automatically genereated shortlist!** If you'd like to manually add additional applications, you may do so on the section below!")
+        # Full scores for threshold calculation
+        scored_full = shortlist_applications(filtered_df, k=len(filtered_df))
+        quantile_map = {"strict": 0.75, "generous": 0.5}
+        threshold_score = scored_full["auto_shortlist_score"].quantile(quantile_map[mode])
+        auto_short = shortlist_applications(filtered_df, threshold=threshold_score)
+        csv_auto = auto_short.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download Shortlist",
+            csv_auto,
+            "auto_shortlist.csv",
+            "text/csv"
+        )
+        st.markdown("#### Shortlist Preview")
+        freeform_col_index = auto_short.columns.get_loc(freeform_col)
+        st.dataframe(auto_short.iloc[:, freeform_col_index:], hide_index=True)
         # Review applications
-        st.subheader("Filtered Applications")
-        st.markdown("To filter applications, use the app's side panel on the left-hand side.")
+        st.header("🌸 Manual Filtering")
+        st.markdown(
+                """
+                Use the side panel filters to manually review applications and add them to your shortlist.
+                All **only filtered results** will show up here.
+                """
+                )
         for idx, row in filtered_df.iterrows():
             with st.expander(f"Application \#{idx}"):
                 st.write("")
@@ -118,24 +151,6 @@ if uploaded_file is not None:
                 "Download Manual Shortlist", csv, "shortlist.csv", "text/csv"
             )
 
-        # Automatic Shortlisting
-        st.sidebar.header("Automatic Shortlisting")
-        max_k = len(filtered_df)
-        default_k = min(5, max_k)
-        num_auto = st.sidebar.number_input(
-            "Number to shortlist automatically",
-            min_value=1, max_value=max_k,
-            value=default_k, step=1
-        )
-        if st.sidebar.button("Generate Auto Shortlist"):
-            auto_short = shortlist_applications(filtered_df, k=num_auto)
-            st.sidebar.markdown(f"**Auto Shortlisted:** {len(auto_short)}")
-            csv_auto = auto_short.to_csv(index=False).encode('utf-8')
-            st.sidebar.download_button(
-                "Download Auto Shortlist", csv_auto, "auto_shortlist.csv", "text/csv"
-            )
-            st.subheader("Auto Shortlist Results")
-            st.dataframe(auto_short, hide_index=True)
 
     with tab2:
         st.write("")
