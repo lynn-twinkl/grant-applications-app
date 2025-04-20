@@ -93,12 +93,19 @@ if uploaded_file is not None:
         auto_short = shortlist_applications(filtered_df, threshold=threshold_score)
         csv_auto = auto_short.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "Download Shortlist",
-            csv_auto,
-            "auto_shortlist.csv",
-            "text/csv"
+            label="Download Shortlist",
+            data=csv_auto,
+            file_name="auto_shortlist.csv",
+            mime="text/csv",
+            icon='⬇️'
         )
         st.markdown("#### Shortlist Preview")
+        st.write("")
+        shortlistCounter_col, mode_col = st.columns(2)
+
+        shortlistCounter_col.metric("Shorlist Length",  len(auto_short))
+        mode_col.metric("Mode", mode)
+
         freeform_col_index = auto_short.columns.get_loc(freeform_col)
         st.dataframe(auto_short.iloc[:, freeform_col_index:], hide_index=True)
         # Review applications
