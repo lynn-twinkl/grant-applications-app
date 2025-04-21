@@ -5,8 +5,8 @@ def shortlist_applications(
     k: int = None,
     threshold: float = None,
     weight_necessity: float = 0.5,
-    weight_length: float = 0.3,
-    weight_usage: float = 0.2
+    weight_length: float = 0.2,
+    weight_usage: float = 0.3
 ) -> pd.DataFrame:
     """
     Automatically shortlist grant applications by combining necessity index,
