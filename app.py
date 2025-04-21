@@ -25,7 +25,7 @@ from typing import Tuple
 # changes. The function only re‑runs if the **file contents** change.
 # -----------------------------------------------------------------------------
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     """
     Load CSV from raw bytes, detect freeform column, compute necessity scores,
@@ -58,7 +58,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
 # -----------------------------------------------------------------------------
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     """Pre‑compute shortlist_score for all rows (used for both modes)."""
     return shortlist_applications(df, k=len(df))
@@ -68,12 +68,13 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
 ################################
 
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
+
 st.title("Community Collections Helper")
 
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv')
 
 if uploaded_file is not None:
-    # Read file from rawfor caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
+    # Read file from raw bytes for caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
     raw = uploaded_file.read()
 
     ## ---- PROCESSED DATA (CACHED) ----
@@ -152,10 +153,14 @@ if uploaded_file is not None:
         st.header("🌸 Manual Filtering")
         st.markdown(
                 """
-                Use the side panel filters to manually review applications and add them to your shortlist.
-                All **only filtered results** will show up here.
+                Below you'll find applications that **did not** make it into the shortlist for you to manually review or append to the shortlist if desired.
+
+                You may use the **side panel** filters to more easily sort through applications that you'd like to review.
                 """
                 )
+
+        st.markdown("#### Filtered Applications")
+        st.write("")
         for idx, row in filtered_df.iterrows():
             with st.expander(f"Application \#{idx}"):
                 st.write("")
