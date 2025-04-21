@@ -7,8 +7,8 @@ load_dotenv()
 def extract_usage(docs, max_concurrency: int = 15) -> List[List[str]]:
 
     llm = ChatOpenAI(
-        model='gpt-4.1-nano',
-        temperature=0.3
+        model='gpt-4.1-mini',
+        temperature=0.2
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -22,7 +22,7 @@ def extract_usage(docs, max_concurrency: int = 15) -> List[List[str]]:
                 - Users will submit excerpts from grant application letters.
                 - From each letter, extract only the tangible items or clearly defined services the school wants to use the grant for.
                 - Output the extracted items as a **clean, comma-separated list**, with no additional explanation or formatting.
-                - Do not include abstract goals or general program names (e.g., "Arts Award program" or "student development").
+                - **Do not include abstract goals or general program names** (e.g., "Arts Award program", "student development","community projects").
                 - Focus on concrete nouns that represent resources or services the grant would directly fund (e.g., "paint", "laptops", "counseling sessions", "sports equipment").
                 - If no **specific** tangible items or clearly defined services are found according to the spcifications above, simply return None.
 
