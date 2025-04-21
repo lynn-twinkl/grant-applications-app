@@ -14,20 +14,26 @@ from functions.extract_usage import extract_usage
 from functions.necessity_index import compute_necessity, index_scaler, qcut_labels
 from functions.column_detection import detect_freeform_col
 from functions.shortlist import shortlist_applications
-import typing
+from typing import Tuple
 
 ##################################
 # CACHED PROCESSING FUNCTION
 ##################################
 
-@st.cache_data
-def load_and_process(raw_csv: bytes) -> typing.Tuple[pd.DataFrame, str]:
+# -----------------------------------------------------------------------------
+# Heavy processing (IO + NLP) is cached to avoid re‑executing when the UI state
+# changes. The function only re‑runs if the **file contents** change.
+# -----------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     """
     Load CSV from raw bytes, detect freeform column, compute necessity scores,
     and extract usage items. Returns processed DataFrame and freeform column name.
     """
     # Read Uploaded Data 
     df_orig = pd.read_csv(BytesIO(raw_csv))
+
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
 
@@ -41,14 +47,27 @@ def load_and_process(raw_csv: bytes) -> typing.Tuple[pd.DataFrame, str]:
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
-    usage = extract_usage(docs)
-    scored['Usage'] = usage
+    scored['Usage'] = extract_usage(docs)
+
     return scored, freeform_col
+
+# -----------------------------------------------------------------------------
+# Derivative computations that rely only on the processed DataFrame are also
+# cached. These are lightweight but still benefit from caching because this
+# function might be called multiple times during widget interaction.
+# -----------------------------------------------------------------------------
+
+
+@st.cache_data(show_spinner=False)
+def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
+    """Pre‑compute shortlist_score for all rows (used for both modes)."""
+    return shortlist_applications(df, k=len(df))
 
 ################################
 # APP SCRIPT
 ################################
 
+style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
 st.title("Community Collections Helper")
 
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv')
@@ -73,9 +92,9 @@ if uploaded_file is not None:
                 default="strict",
                 )
         
-        scored_full = shortlist_applications(df, k=len(df))
+        scored_full = compute_shortlist(df)
         threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
-        auto_short_df = shortlist_applications(df, threshold=threshold_score)
+        auto_short_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
 
         st.title("Filters")
         min_idx = float(df['necessity_index'].min())
@@ -145,7 +164,6 @@ if uploaded_file is not None:
                 col2.metric("Urgency", f"{int(row['urgency_score'])}")
                 col3.metric("Severity", f"{int(row['severity_score'])}")
                 col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
-                style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
 
                 # HTML for clean usage items 
                 usage_items = [item for item in row['Usage'] if item and item.lower() != 'none']
@@ -187,7 +205,7 @@ if uploaded_file is not None:
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
-        col2.metric("Median N.I", df['necessity_index'].median())
+        col2.metric("Median N.I", df['necessity_index'].median().round(2))
         col3.metric("Total Applications", len(df))
         st.html("<br>")
 
