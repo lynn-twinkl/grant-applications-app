@@ -4,13 +4,14 @@ def shortlist_applications(
     df: pd.DataFrame,
     k: int = None,
     threshold: float = None,
-    weight_necessity: float = 0.5,
-    weight_length: float = 0.2,
-    weight_usage: float = 0.3
+    weight_necessity: float = 0.55,
+    weight_length: float = 0.1,
+    weight_usage: float = 0.35
 ) -> pd.DataFrame:
     """
     Automatically shortlist grant applications by combining necessity index,
-    application length (favoring longer submissions), and whether usage was specified.
+    application length (favoring longer submissions), and the specificity of the
+    requested usage list.
 
     Args:
         df: Processed DataFrame including columns 'necessity_index', 'word_count', and 'Usage'.
@@ -18,7 +19,7 @@ def shortlist_applications(
         threshold: Score threshold above which to select applications. Mutually exclusive with k.
         weight_necessity: Weight for necessity_index (0 to 1).
         weight_length: Weight for length score (0 to 1).
-        weight_usage: Weight for usage inclusion (0 to 1).
+        weight_usage: Weight for usage specificity (0 to 1).
 
     Returns:
         DataFrame of shortlisted applications sorted by descending combined score.
@@ -38,14 +39,36 @@ def shortlist_applications(
     else:
         length_score = pd.Series([0.5] * len(df), index=df.index)
 
-    # Compute usage score: 1 if any usage items specified, else 0
-    def has_usage(items):
-        return any(
-            item and isinstance(item, str) and item.strip().lower() != 'none'
+    # Compute usage score based on *how many* concrete usage items were extracted
+    # (previously this was a simple binary flag).  Longer lists are taken as a
+    # signal of greater specificity → higher score.  We first count the number
+    # of non‑empty items, then min‑max normalise the counts so the resulting
+    # score is between 0 and 1 (mirroring the approach used for
+    # `length_score`).
+
+    def count_valid_usage(items):
+        """Return the number of meaningful usage entries in *items*.
+
+        The Usage column is expected to contain a list of strings (output of
+        `extract_usage.extract_usage`). We treat empty strings and the literal
+        "None" (case‑insensitive) as non‑entries.
+        """
+        if not isinstance(items, (list, tuple, set)):
+            return 0
+        return sum(
+            1
             for item in items
+            if isinstance(item, str) and item.strip() and item.strip().lower() != "none"
         )
 
-    usage_score = df['Usage'].apply(has_usage).astype(float)
+    usage_counts = df["Usage"].apply(count_valid_usage)
+
+    min_uc, max_uc = usage_counts.min(), usage_counts.max()
+    if max_uc != min_uc:
+        usage_score = (usage_counts - min_uc) / (max_uc - min_uc)
+    else:
+        # If all rows have identical counts (e.g. all zero), assign a neutral 0.5
+        usage_score = pd.Series([0.5] * len(df), index=df.index)
 
     # Combine scores with normalized weights
     total_weight = weight_necessity + weight_length + weight_usage
