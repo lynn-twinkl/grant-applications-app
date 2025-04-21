@@ -45,7 +45,7 @@ WEIGHTS = {
     'urgency_markers': 3,
     'severity_markers': 2.5,
     'vulnerability_markers': 3,
-    'emotional_appeal': 1.5,
+    'emotional_appeal': 2,
     'superlatives': 1.0
 }
 
