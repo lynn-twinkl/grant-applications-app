@@ -4,11 +4,11 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-def extract_usage(docs, max_concurrency: int = 10) -> List[List[str]]:
+def extract_usage(docs, max_concurrency: int = 15) -> List[List[str]]:
 
     llm = ChatOpenAI(
-        model='gpt-4o-mini',
-        temperature=0.2
+        model='gpt-4.1-nano',
+        temperature=0.3
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -24,9 +24,9 @@ def extract_usage(docs, max_concurrency: int = 10) -> List[List[str]]:
                 - Output the extracted items as a **clean, comma-separated list**, with no additional explanation or formatting.
                 - Do not include abstract goals or general program names (e.g., "Arts Award program" or "student development").
                 - Focus on concrete nouns that represent resources or services the grant would directly fund (e.g., "paint", "laptops", "counseling sessions", "sports equipment").
-                - If no tangible items or clearly defined services are found according to the spcifications above, simply return None.
+                - If no **specific** tangible items or clearly defined services are found according to the spcifications above, simply return None.
 
-                ## Example:
+                ## Example 1:
 
                 **User Input:**
                 _I work in an alternative provision supporting disadvantaged children with SEND. Many of our students face significant challenges in communication and emotional expression.  
@@ -37,6 +37,14 @@ def extract_usage(docs, max_concurrency: int = 10) -> List[List[str]]:
                 
                 **Your Output:**
                 paints, canvases, clay, sketchbooks, art therapist
+
+                ## Example 2:
+
+                **User Input:**
+                _I would use this to buy resources to support the outdoor teaching of science and get the students engaged. I work in a school with special educational needs pupils and this would go a long way in getting them enthisaisstic about science, a topic students often find boring and not very engaging._
+
+                **Your Output:**
+                None
                 """
                  ),
                 ("human", "{input}")
