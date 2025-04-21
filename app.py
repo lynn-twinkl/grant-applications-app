@@ -75,7 +75,7 @@ if uploaded_file is not None:
         
         scored_full = shortlist_applications(df, k=len(df))
         threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
-        auto_short = shortlist_applications(df, threshold=threshold_score)
+        auto_short_df = shortlist_applications(df, threshold=threshold_score)
 
         st.title("Filters")
         min_idx = float(df['necessity_index'].min())
@@ -83,7 +83,7 @@ if uploaded_file is not None:
         filter_range = st.sidebar.slider(
             "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
         )
-        filtered_df = df[df['necessity_index'].between(filter_range[0], filter_range[1])]
+        filtered_df = df[(~df.index.isin(auto_short_df.index)) & (df['necessity_index'].between(filter_range[0], filter_range[1]))]
 
         st.markdown(f"**Total Applications:** {len(df)}")
         st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
@@ -99,7 +99,7 @@ if uploaded_file is not None:
         st.header("✨ Automatic Shortlist")
         st.markdown("Here's your **automatically genereated shortlist!** If you'd like to manually add additional applications, you may do so on the section below!")
 
-        csv_auto = auto_short.to_csv(index=False).encode("utf-8")
+        csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Shortlist",
             data=csv_auto,
@@ -109,9 +109,10 @@ if uploaded_file is not None:
         )
         st.markdown("#### Shortlist Preview")
         st.write("")
-        shortlistCounter_col, mode_col = st.columns(2)
+        total_col, shortlistCounter_col, mode_col = st.columns(3)
 
-        shortlistCounter_col.metric("Shorlist Length",  len(auto_short))
+        total_col.metric("Applications Submitted", len(df))
+        shortlistCounter_col.metric("Shorlist Length",  len(auto_short_df))
         mode_col.metric("Mode", mode)
 
         shorltist_cols_to_show = [
@@ -125,7 +126,7 @@ if uploaded_file is not None:
                 'shortlist_score'
                 ]
 
-        st.dataframe(auto_short.loc[:, shorltist_cols_to_show], hide_index=True)
+        st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
 
         ## REVIEW APPLICATIONS 
 
