@@ -12,7 +12,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 
 from functions.extract_usage import extract_usage
 from functions.necessity_index import compute_necessity, index_scaler, qcut_labels
-from functions.column_detection import detect_freeform_answer_col
+from functions.column_detection import detect_freeform_col
 from functions.shortlist import shortlist_applications
 import typing
 
@@ -29,7 +29,7 @@ def load_and_process(raw_csv: bytes) -> typing.Tuple[pd.DataFrame, str]:
     # Read Uploaded Data 
     df_orig = pd.read_csv(BytesIO(raw_csv))
     # Detect freeform column
-    freeform_col = detect_freeform_answer_col(df_orig)
+    freeform_col = detect_freeform_col(df_orig)
 
     #Word Count
     df_orig['word_count'] = df_orig[freeform_col].fillna('').str.split().str.len()
@@ -115,6 +115,7 @@ if uploaded_file is not None:
         mode_col.metric("Mode", mode)
 
         shorltist_cols_to_show = [
+                'Id',
                 freeform_col,
                 'Usage',
                 'necessity_index',
