@@ -60,13 +60,13 @@ def shortlist_applications(
         weights['usage'] * usage_score
     )
     df = df.copy()
-    df['auto_shortlist_score'] = combined
+    df['shortlist_score'] = combined
 
     # Select applications based on k or threshold
-    df_sorted = df.sort_values('auto_shortlist_score', ascending=False)
+    df_sorted = df.sort_values('shortlist_score', ascending=False)
     if k is not None:
         result = df_sorted.head(k)
     else:
-        result = df_sorted[df_sorted['auto_shortlist_score'] >= threshold]
+        result = df_sorted[df_sorted['shortlist_score'] >= threshold]
 
     return result

@@ -74,7 +74,7 @@ if uploaded_file is not None:
                 )
         
         scored_full = shortlist_applications(df, k=len(df))
-        threshold_score = scored_full["auto_shortlist_score"].quantile(quantile_map[mode])
+        threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
         auto_short = shortlist_applications(df, threshold=threshold_score)
 
         st.title("Filters")
@@ -114,9 +114,17 @@ if uploaded_file is not None:
         shortlistCounter_col.metric("Shorlist Length",  len(auto_short))
         mode_col.metric("Mode", mode)
 
-        freeform_col_index = auto_short.columns.get_loc(freeform_col)
-        st.dataframe(auto_short.iloc[:, freeform_col_index:], hide_index=True)
+        shorltist_cols_to_show = [
+                freeform_col,
+                'Usage',
+                'necessity_index',
+                'urgency_score',
+                'severity_score',
+                'vulnerability_score',
+                'shortlist_score'
+                ]
 
+        st.dataframe(auto_short.loc[:, shorltist_cols_to_show], hide_index=True)
 
         ## REVIEW APPLICATIONS 
 
