@@ -37,6 +37,8 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
 
+    df_orig = df_orig[df_orig[freeform_col].notna()]
+
     #Word Count
     df_orig['word_count'] = df_orig[freeform_col].fillna('').str.split().str.len()
 
@@ -123,7 +125,7 @@ if uploaded_file is not None:
         st.download_button(
             label="Download Shortlist",
             data=csv_auto,
-            file_name="auto_shortlist.csv",
+            file_name="shortlist.csv",
             mime="text/csv",
             icon='⬇️'
         )
