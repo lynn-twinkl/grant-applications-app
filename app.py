@@ -14,6 +14,7 @@ from src.extract_usage import extract_usage
 from src.necessity_index import compute_necessity, index_scaler, qcut_labels
 from src.column_detection import detect_freeform_col
 from src.shortlist import shortlist_applications
+from src.twinkl_originals import find_book_candidates
 from typing import Tuple
 
 ##################################
@@ -46,6 +47,10 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     scored = df_orig.join(df_orig[freeform_col].apply(compute_necessity))
     scored['necessity_index'] = index_scaler(scored['necessity_index'].values)
     scored['priority'] = qcut_labels(scored['necessity_index'])
+
+    # Find Twinkl Originals Candidates
+    scored['book_candidates'] = find_book_candidates(scored, freeform_col)
+
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
@@ -145,7 +150,8 @@ if uploaded_file is not None:
                 'urgency_score',
                 'severity_score',
                 'vulnerability_score',
-                'shortlist_score'
+                'shortlist_score',
+                'book_candidates',
                 ]
 
         st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
