@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-def extract_usage(docs, max_concurrency: int = 15) -> List[List[str]]:
+def extract_usage(docs, max_concurrency: int = 20) -> List[List[str]]:
 
     llm = ChatOpenAI(
         model='gpt-4.1-mini',
