@@ -10,10 +10,10 @@ from streamlit_extras.metric_cards import style_metric_cards
 
 # ---- FUNCTIONS ----
 
-from functions.extract_usage import extract_usage
-from functions.necessity_index import compute_necessity, index_scaler, qcut_labels
-from functions.column_detection import detect_freeform_col
-from functions.shortlist import shortlist_applications
+from src.extract_usage import extract_usage
+from src.necessity_index import compute_necessity, index_scaler, qcut_labels
+from src.column_detection import detect_freeform_col
+from src.shortlist import shortlist_applications
 from typing import Tuple
 
 ##################################
