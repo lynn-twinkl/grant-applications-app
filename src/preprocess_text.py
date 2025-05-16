@@ -1,6 +1,6 @@
 import string
 
-def preprocess_text(text):
+def normalise_text(text):
     """
     This function normalises text for later use in
     a machine learning pipeline
