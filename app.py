@@ -5,7 +5,9 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import joblib
 from io import BytesIO
+import os
 from streamlit_extras.metric_cards import style_metric_cards
 
 # ---- FUNCTIONS ----
@@ -15,6 +17,7 @@ from src.necessity_index import compute_necessity, index_scaler, qcut_labels
 from src.column_detection import detect_freeform_col
 from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
+from src.preprocess_text import normalise_text 
 from typing import Tuple
 
 ##################################
@@ -25,6 +28,11 @@ from typing import Tuple
 # Heavy processing (IO + NLP) is cached to avoid re‑executing when the UI state
 # changes. The function only re‑runs if the **file contents** change.
 # -----------------------------------------------------------------------------
+
+@st.cache_resource
+def load_heartfelt_predictor():
+    model_path = os.path.join("src", "models", "heartfelt_pipeline.joblib")
+    return joblib.load(model_path)
 
 @st.cache_data(show_spinner=True)
 def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
@@ -51,10 +59,16 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     # Find Twinkl Originals Candidates
     scored['book_candidates'] = find_book_candidates(scored, freeform_col)
 
+    # Label Heartfelt Applications
+    scored['clean_text'] = scored[freeform_col].map(normalise_text)
+    model = load_heartfelt_predictor()
+    scored['is_heartfelt'] = model.predict(scored['clean_text'].astype(str))
+
+
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
-    scored['Usage'] = extract_usage(docs)
+    #scored['Usage'] = extract_usage(docs)
 
     return scored, freeform_col
 
@@ -87,6 +101,8 @@ if uploaded_file is not None:
     ## ---- PROCESSED DATA (CACHED) ----
 
     df, freeform_col = load_and_process(raw)
+
+    st.dataframe(df)
 
     ## ---- INTERACTIVE FILTERING & REVIEW INTERFACE ----
 
