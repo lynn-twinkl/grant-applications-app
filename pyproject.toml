@@ -1,0 +1,27 @@
+[project]
+name = ""
+version = "0.0.1"
+dependencies = [
+    "altair",
+    "bertopic",
+    "contractions",
+    "joblib",
+    "langchain-core",
+    "langchain-openai",
+    "nltk",
+    "numpy",
+    "openai",
+    "pandas",
+    "python-dotenv",
+    "scikit-learn",
+    "sentence-transformers",
+    "spacy",
+    "streamlit",
+    "streamlit-extras",
+    "torch",
+    "tqdm",
+    "watchdog>=6.0.0",
+]
+
+[tool.uv]
+package = false
