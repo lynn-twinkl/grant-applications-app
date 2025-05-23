@@ -1,45 +1,23 @@
+import openai
+import numpy as np
 import streamlit as st
 import re
 import string
 import torch
 import spacy
-
-from sentence_transformers import SentenceTransformer
-import nltk
-from nltk.corpus import stopwords
-import contractions
 from tqdm import tqdm
 
-
+from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 from bertopic import BERTopic
 from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance, OpenAI, PartOfSpeech
-import openai
-import numpy as np
+
 
 import os
 from dotenv import load_dotenv
-load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../",".env")))
-
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-#################################
-# OpenAI Topic Representation
-#################################
-def create_openai_model():
-            client = openai.OpenAI(api_key=OPENAI_API_KEY)
-            prompt = """
-            I have a topic that contains the following documents:
-            [DOCUMENTS]
-
-            The topic is described by the following keywords: [KEYWORDS]
-
-            Based on the information above, extract a short yet descriptive topic label of at most 4 words. The labels should be interpretable enough to stakeholders that don't have access to the raw data. Make sure it is in the following format:
-
-            topic: <topic label>
-            """
-            openai_model = OpenAI(client, model="gpt-4o-mini", exponential_backoff=True, chat=True, prompt=prompt)
-            return openai_model
 
 #############################################
 # Convert OpenAI Representation to CustomName
@@ -50,60 +28,13 @@ def ai_labeles_to_custom_name(model):
     chatgpt_topic_labels[-1] = "Outlier Topic"
     model.set_topic_labels(chatgpt_topic_labels)
 
-"""
------------------------------------
-Lemmatization & Stopword Removal
------------------------------------
-
-"""
-def topicModeling_preprocessing(df, spacy_model="en_core_web_lg"):
-
-    base_stopwords = set(stopwords.words('english')) 
-
-    custom_stopwords = {
-        'material', 'materials', 'resources', 'resource', 'activity',
-        'activities', 'sheet', 'sheets', 'worksheet', 'worksheets',
-        'teacher', 'teachers', 'teach', 'high school', 'highschool',
-        'middle school', 'grade', 'grades', 'hs', 'level', 'age', 'ages',
-        'older', 'older kid', 'kid', 'student', "1st", "2nd", "3rd", "4th", '5th', '6th',
-        '7th', '8th', '9th'
-        }
-
-    stopword_set = base_stopwords.union(custom_stopwords)
-
-    stopword_pattern = r'\b(?:' + '|'.join(re.escape(word) for word in stopword_set) + r')\b'
-
-    nlp = spacy.load(spacy_model)
-
-    def clean_lemmatize_text(text):
-        if not isinstance(text, str):
-            return None
-        
-        text = contractions.fix(text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        text = re.sub(stopword_pattern, '', text)
-
-        doc = nlp(text)
-        tokens = [token.lemma_ for token in doc]
-        
-        clean_text = " ".join(tokens).strip()
-        clean_text = re.sub(r'\s+', ' ', clean_text)
-
-        return clean_text if clean_text else None
+###################################
+# HELPER FUNCTIONS
+###################################
 
 
-    df['processedForModeling'] = df['preprocessedBasic'].apply(clean_lemmatize_text)
 
-    # Drop rows where cleaned text is empty or None
-    df = df.dropna(subset=['processedForModeling'])
-
-    return df
-
-"""
---------------------------
- Load Transformer Model
---------------------------
-"""
+## -------- LOAD TRANSFORMER MODEL -------
 
 def load_embedding_model(model_name):
     if torch.cuda.is_available():
@@ -117,11 +48,7 @@ def load_embedding_model(model_name):
     return SentenceTransformer(model_name, device=device)
 
 
-"""
--------------------------
-Batch Embedding Creation
--------------------------
-"""
+## ------------ GENERATE EMBEDDINGS ------------
 
 def encode_content_documents(embedding_model, content_documents, batch_size=20):
     embeddings_batches = []
@@ -136,155 +63,79 @@ def encode_content_documents(embedding_model, content_documents, batch_size=20):
 
     return np.vstack(embeddings_batches)
 
-"""
------------------------------
-Topic Modeling with BERTopic
------------------------------
-"""
+## ------- BUILDING STOPWORDS LIST ------
 
-try:
-    nltk.data.find("corpora/stopwords")
-except LookupError:
-    nltk.download("stopwords")
+stopwords = list(nlp.Defaults.stop_words)
 
-stopwords = list(stopwords.words('english')) + [
-        'activities',
-        'activity',
-        'class',
-        'classroom',
-        'material',
-        'materials',
-        'membership',
-        'memberships',
-        'pupil',
-        'pupils',
-        'resource',
-        'resources',
-        'sheet',
-        'sheets',
-        'student',
-        'students',
-        'subscription',
-        'subscriptions',
-        'subscribe',
-        'subscribed',
-        'recommend',
-        'recommendation',
-        'teach',
-        'teacher',
-        'teachers',
-        'tutor',
-        'tutors',
-        'twinkl',
-        'twinkls',
-        'twinkle',
-        'worksheet',
-        'worksheets',
-    ]
 
-######### --------------- BERTOPIC ----------------- #############
+custom_stopwords = [
+    'thank you', 'thankyou', 'thanks', 'thank'
+    'children', 'child', 'students',
+    'twinkl',
+    'funding'
+
+]
+
+stopwords.extend(custom_stopwords)
+
+
+## --------- INSTANTIATE OPENAI MODEL ---------
+
+def create_openai_model():
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            prompt = """
+            This topic contains the following documents:
+            [DOCUMENTS]
+
+            The topic is described by the following keywords: [KEYWORDS]
+
+            Based on the information above, extract a short yet descriptive topic label.
+            """
+            
+            openai_model = OpenAI(
+                    client,
+                    model="gpt-4.1-nano",
+                    exponential_backoff=True,
+                    chat=True, prompt=prompt,
+                    system_prompt= """ **Task**: As a topic modeling expert, your responsibility is to generate concise yet comprehensive topic labels from rows in a BertTopic `topic_info` dataframe. These topics have been derived from grant application forms submitted by schools, tutors, or other institutions participating in Twinkl giveaways.\n\n**Objective**: Your goal is to create labels for the extracted topics that accurately and clearly describe each topic within the specified context. These labels should be easily interpretable by the members of the Community Collections team.\n\n**Instructions**: \n\n1. **Understand the Context**: The topics relate to grant applications and are relevant to educational institutions participating in Twinkl giveaways.\n\n2. **Generate Labels**:\n- Create labels that are short yet capture the essence of each topic.\n- Ensure that the labels are contextually appropriate and provide clarity.\n- Focus on making the labels easily understandable for the Community Collections team. \n\n3. **Considerations**:\n- Each label should succinctly convey the main idea of the topic.\n- Avoid overly technical language unless necessary for precision.\n- Ensure the labels align with the overall educational and grant-related context."""
+            )
+            return openai_model
+
+#############################
+# BERTOPIC MODELING
+#############################
+
 def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_model):
     
-    main_representation_model = KeyBERTInspired()
-    aspect_representation_model1 = MaximalMarginalRelevance(diversity=.3)
+    main_representation_model = MaximalMarginalRelevance(diversity=.3)
 
-    # OpenAI Representation Model
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    prompt = """
-    I have a topic that contains the following documents:
-    [DOCUMENTS]
-
-    The topic is described by the following keywords: [KEYWORDS]
-
-    Based on the information above, extract a short but highly descriptive topic label of at most 5 words. Make sure it is in the following format:
-
-    topic: <topic label>
-    """
-    openai_model = OpenAI(client, model="gpt-4o-mini", exponential_backoff=True, chat=True, prompt=prompt)
+    openai_model = create_openai_model()
 
     representation_model = {
         "Main": main_representation_model,
-        "Secondary Representation": aspect_representation_model1,
+        "OpenAI": openai_model
     }
 
-    vectorizer_model = CountVectorizer(min_df=2, max_df=0.60, stop_words=stopwords)
 
-    seed_topic_list = [
-            ["autism", "special needs", "special education needs", "special education", "adhd", "autistic", "dyslexia", "dyslexic", "sen"],
-            ]
+    vectorizer_model = CountVectorizer(stop_words=stopwords, ngram_range=(1,2))
 
     topic_model = BERTopic(
-        verbose=True,
-        embedding_model=_embedding_model,
+        verbose=true,
         umap_model=_umap_model,
-        hdbscan_model = _hdbscan_model,
+        representation_model=representation_model
         vectorizer_model=vectorizer_model,
-        #seed_topic_list = seed_topic_list,
-        representation_model=representation_model,
+        hdbscan_model=_hdbscan_model,
+        embedding_model=_embedding_model,
+        nr_topics='auto'
     )
-
+    
     topics, probs = topic_model.fit_transform(docs, embeddings)
+
     return topic_model, topics, probs
 
-##################################
-# TOPIC MERGING
-##################################
-
-def merge_specific_topics(topic_model, sentences, 
-                          cancellation_keywords=["cancel", "cancellation", "cancel", "canceled"],
-                          thanks_keywords=["thank", "thanks", "thank you", "thankyou", "ty", "thx"],
-                          expensive_keywords=["can't afford", "price", "expensive", "cost"]):
-
-
-    topic_info = topic_model.get_topic_info()
-    
-    # Identify cancellation-related topics by checking if any cancellation keyword appears in the topic name.
-    cancellation_regex = '|'.join(cancellation_keywords)
-    cancellation_topics = topic_info[
-        topic_info['Name'].str.contains(cancellation_regex, case=False, na=False)
-    ]['Topic'].tolist()
-    
-    # Identify thank-you-related topics similarly.
-    thanks_regex = '|'.join(thanks_keywords)
-    thanks_topics = topic_info[
-        topic_info['Name'].str.contains(thanks_regex, case=False, na=False)
-    ]['Topic'].tolist()
-    
-    # Identify expensive-related topics.
-    expensive_regex = '|'.join(expensive_keywords)
-    expensive_topics = topic_info[
-        topic_info['Name'].str.contains(expensive_regex, case=False, na=False)
-    ]['Topic'].tolist()
-    
-    # Exclude the outlier topic (-1) if it appears.
-    cancellation_topics = [t for t in cancellation_topics if t != -1]
-    thanks_topics = [t for t in thanks_topics if t != -1]
-    expensive_topics = [t for t in expensive_topics if t != -1]
-    
-    # Create a list of topics to merge
-    topics_to_merge = []
-    
-    if len(cancellation_topics) > 1:
-        print(f"Merging cancellation topics: {cancellation_topics}")
-        topics_to_merge.append(cancellation_topics)
-    
-    if len(thanks_topics) > 1:
-        print(f"Merging thank-you topics: {thanks_topics}")
-        topics_to_merge.append(thanks_topics)
-        
-    if len(expensive_topics) > 1:
-        print(f"Merging expensive topics: {expensive_topics}")
-        topics_to_merge.append(expensive_topics)
-    
-    # Call merge_topics
-    if topics_to_merge:
-        topic_model.merge_topics(sentences, topics_to_merge)
-    
-    return topic_model
-
 
 ##################################
-# Topic to Dataframe Mapping
+# TOPIC TO DATAFRAME MAPPING
 #################################
 
 def update_df_with_topics(df, mapping, sentence_topics, topic_label_map):
