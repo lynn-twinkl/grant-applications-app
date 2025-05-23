@@ -20,6 +20,8 @@ from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
 from typing import Tuple
 
+style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
+
 ##################################
 # CACHED PROCESSING FUNCTION
 ##################################
@@ -68,7 +70,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
-    #scored['Usage'] = extract_usage(docs)
+    scored['Usage'] = extract_usage(docs)
 
     return scored, freeform_col
 
@@ -85,10 +87,8 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     return shortlist_applications(df, k=len(df))
 
 ################################
-# APP SCRIPT
+# MAIN APP SCRIPT
 ################################
-
-style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
 
 st.title("Community Collections Helper")
 
@@ -98,16 +98,19 @@ if uploaded_file is not None:
     # Read file from raw bytes for caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
     raw = uploaded_file.read()
 
-    ## ---- PROCESSED DATA (CACHED) ----
+    ## ====== PROCESSED DATA (CACHED) ======
 
     df, freeform_col = load_and_process(raw)
 
-    st.dataframe(df)
+    book_candidates_df = df[df['book_candidates'] == True]
 
-    ## ---- INTERACTIVE FILTERING & REVIEW INTERFACE ----
+    ###############################
+    #           SIDEBAR           #
+    ###############################
 
     with st.sidebar:
         st.title("Shortlist Mode")
+
 
         quantile_map = {"strict": 0.75, "generous": 0.5}
         mode = st.segmented_control(
@@ -126,31 +129,52 @@ if uploaded_file is not None:
         filter_range = st.sidebar.slider(
             "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
         )
+        
         filtered_df = df[(~df.index.isin(auto_short_df.index)) & (df['necessity_index'].between(filter_range[0], filter_range[1]))]
 
         st.markdown(f"**Total Applications:** {len(df)}")
         st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
 
-    ## ----------------- MAIN PANEL ----------------
-
+    # ------ CREATE TAB SECTIONS -------
     tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
 
-    ## ---------- SHORTLIST MANAGER TAB -----------
+    ##################################################
+    #              SHORTLIST MANAGER TAB             # 
+    ##################################################
 
     with tab1:
         
+        ## =========== AUTOMATIC SHORTLIST =========
+
         st.header("✨ Automatic Shortlist")
-        st.markdown("Here's your **automatically genereated shortlist!** If you'd like to manually add additional applications, you may do so on the section below!")
 
         csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
+        all_processed_data = df.to_csv(index=False).encode("utf-8")
+        book_candidates = book_candidates_df.to_csv(index=False).encode("utf-8")
+
+
+        csv_options = {
+            "Shortlist": (csv_auto, "shortlist.csv"),
+            "All Processed Data": (all_processed_data, "all_processed.csv"),
+            "Book Candidates": (book_candidates, "book_candidates.csv"),
+        }
+
+        choice = st.selectbox("Select a file for download", list(csv_options.keys()))
+
+        csv_data, file_name = csv_options[choice]
+
+
         st.download_button(
-            label="Download Shortlist",
-            data=csv_auto,
-            file_name="shortlist.csv",
+            label=f"Download CSV",
+            data=csv_data,
+            file_name=file_name,
             mime="text/csv",
-            icon='⬇️'
+            help="This button will download the selected file from above",
+            icon="⬇️"
+
         )
-        st.markdown("#### Shortlist Preview")
+
+        
         st.write("")
         total_col, shortlistCounter_col, mode_col = st.columns(3)
 
@@ -172,8 +196,9 @@ if uploaded_file is not None:
 
         st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
 
-        ## REVIEW APPLICATIONS 
+        ## ====== APPLICATIONS REVIEW =======
 
+        st.divider()
         st.header("🌸 Manual Filtering")
         st.markdown(
                 """
@@ -214,7 +239,7 @@ if uploaded_file is not None:
                     key=f"shortlist_{idx}"
                 )
 
-        # Shortlist summary and download (manual)
+        ## ======== SHORTLIST SUMMARY AND DOWNLOAD (MANUAL) ======
         shortlisted = [
             i for i in filtered_df.index
             if st.session_state.get(f"shortlist_{i}", False)
