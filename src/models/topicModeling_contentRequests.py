@@ -5,6 +5,8 @@ import re
 import string
 import torch
 import spacy
+from spacy.cli import download
+import importlib.util
 from tqdm import tqdm
 
 from sentence_transformers import SentenceTransformer
@@ -32,6 +34,18 @@ def ai_labeles_to_custom_name(model):
 # HELPER FUNCTIONS
 ###################################
 
+## ---------- LOAD SPACY MODEL -------
+
+def load_spacy_model(model_name="en_core_web_md"):
+    """
+    This model is used for sentence tokenization
+    as well as stopword generation
+    """
+    if importlib.util.find_spec(model_name) is None:
+        print(f"Model '{model_name}' not found. Downloading now...")
+        download(model_name)
+
+    return spacy.load(model_name)
 
 
 ## -------- LOAD TRANSFORMER MODEL -------
@@ -65,6 +79,7 @@ def encode_content_documents(embedding_model, content_documents, batch_size=20):
 
 ## ------- BUILDING STOPWORDS LIST ------
 
+nlp = load_spacy_model()
 stopwords = list(nlp.Defaults.stop_words)
 
 
@@ -122,7 +137,7 @@ def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_mod
     topic_model = BERTopic(
         verbose=true,
         umap_model=_umap_model,
-        representation_model=representation_model
+        representation_model=representation_model,
         vectorizer_model=vectorizer_model,
         hdbscan_model=_hdbscan_model,
         embedding_model=_embedding_model,
