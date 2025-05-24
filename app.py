@@ -23,6 +23,7 @@ from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
 import src.models.topic_modeling_pipeline as topic_modeling_pipeline
+from src.plot_histogram import plot_hist
 from typing import Tuple
 
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
@@ -279,7 +280,7 @@ if uploaded_file is not None:
                     key=f"shortlist_{idx}"
                 )
 
-        ## ======== SHORTLIST SUMMARY AND DOWNLOAD (MANUAL) ======
+        # ======== SHORTLIST SUMMARY AND DOWNLOAD (MANUAL) ======
         shortlisted = [
             i for i in filtered_df.index
             if st.session_state.get(f"shortlist_{i}", False)
@@ -297,6 +298,25 @@ if uploaded_file is not None:
     #########################################
 
     with tab2:
+
+        ## =========== DATA OVERVIEW ==========
+        st.write("")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
+        col2.metric("Median N.I", df['necessity_index'].median().round(2))
+        col3.metric("Total Applications", len(df))
+        st.html("<br>")
+
+        st.subheader("Necessity Index (NI) Distribution")
+        st.write("")
+        st.write("")
+        # Histogram of necessity index colored by priority labels
+        ni_distribution_plt = plot_hist(df, col_to_plot='necessity_index', bins=20)
+
+        st.plotly_chart(ni_distribution_plt)
+
+        st.dataframe(df, hide_index=True)
 
         # =========== TOPIC MODELING ============ 
 
@@ -330,29 +350,4 @@ if uploaded_file is not None:
         st.dataframe(topic_model.get_topic_info())
 
 
-        st.write("")
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
-        col2.metric("Median N.I", df['necessity_index'].median().round(2))
-        col3.metric("Total Applications", len(df))
-        st.html("<br>")
-
-        st.subheader("Necessity Index (NI) Distribution")
-        st.write("")
-        st.write("")
-        # Histogram of necessity index colored by priority labels
-        chart = alt.Chart(df).mark_bar().encode(
-            x=alt.X('necessity_index:Q', bin=alt.Bin(maxbins=20), title='Necessity Index'),
-            y='count()',
-            color=alt.Color(
-                'priority:N',
-                scale=alt.Scale(
-                    domain=['low', 'medium', 'high', 'priority'],
-                    range=['#a7d6fd', '#FFA500', '#FF5733', '#FF0000']
-                ),
-                legend=alt.Legend(title='Priority')
-            )
-        )
-        st.altair_chart(chart, use_container_width=True)
-        st.dataframe(df, hide_index=True)
+        
