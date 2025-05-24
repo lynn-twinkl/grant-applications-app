@@ -3,9 +3,9 @@ name = ""
 version = "0.0.1"
 requires-python = ">=3.12"
 dependencies = [
-    "altair",
     "bertopic",
     "contractions",
+    "en-core-web-sm",
     "joblib",
     "jupyterlab>=4.4.2",
     "langchain-core",
@@ -14,6 +14,7 @@ dependencies = [
     "openai",
     "pandas",
     "pip>=25.1.1",
+    "plotly>=6.1.0",
     "python-dotenv",
     "scikit-learn",
     "sentence-transformers",
@@ -27,3 +28,6 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
