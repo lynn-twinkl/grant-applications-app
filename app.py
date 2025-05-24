@@ -18,7 +18,7 @@ from streamlit_extras.metric_cards import style_metric_cards
 
 from src.extract_usage import extract_usage
 from src.necessity_index import compute_necessity, index_scaler, qcut_labels
-from src.column_detection import detect_freeform_col
+from src.column_detection import detect_freeform_col, detect_id_col
 from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
@@ -56,6 +56,8 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
 
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
+    id_col = detect_id_col(df_orig)
+    print(id_col)
 
     df_orig = df_orig[df_orig[freeform_col].notna()]
 
@@ -81,7 +83,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     docs = df_orig[freeform_col].to_list()
     scored['Usage'] = extract_usage(docs)
 
-    return scored, freeform_col
+    return scored, freeform_col, id_col
 
 # -----------------------------------------------------------------------------
 # Derivative computations that rely only on the processed DataFrame are also
@@ -114,7 +116,7 @@ if uploaded_file is not None:
 
     ## ====== PROCESSED DATA (CACHED) ======
 
-    df, freeform_col = load_and_process(raw)
+    df, freeform_col, id_col = load_and_process(raw)
 
     book_candidates_df = df[df['book_candidates'] == True]
 
@@ -138,19 +140,43 @@ if uploaded_file is not None:
         auto_short_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
 
         st.title("Filters")
+
+        ## --- Dataframe To Filter ---
+        options = ['All applications', 'Not shortlisted']
+        selected_view = st.pills('Choose data to filter', options, default='Not shortlisted')
+        st.write("")
+
+        ## --- Necessity Index Filtering ---
         min_idx = float(df['necessity_index'].min())
         max_idx = float(df['necessity_index'].max())
         filter_range = st.sidebar.slider(
             "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
         )
         
-        filtered_df = df[(~df.index.isin(auto_short_df.index)) & (df['necessity_index'].between(filter_range[0], filter_range[1]))]
+        def filter_all_applications(df, auto_short_df, filter_range):
+            return df[df['necessity_index'].between(filter_range[0], filter_range[1])]
+
+        def filter_not_shortlisted(df, auto_short_df, filter_range):
+            return df[
+                (~df.index.isin(auto_short_df.index)) &
+                (df['necessity_index'].between(filter_range[0], filter_range[1]))
+            ]
+
+        filter_map = {
+                'All applications': filter_all_applications,
+                'Not shortlisted': filter_not_shortlisted,
+                }
+
+        filtered_df = filter_map[selected_view](df, auto_short_df, filter_range)
+
 
         st.markdown(f"**Total Applications:** {len(df)}")
         st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
 
-    # ------ CREATE TAB SECTIONS -------
+
+    ## ====== CREATE TAB SECTIONS =======
     tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
+
 
     ##################################################
     #              SHORTLIST MANAGER TAB             # 
@@ -179,7 +205,7 @@ if uploaded_file is not None:
 
 
         st.download_button(
-            label=f"Download CSV",
+            label=f"Download {choice}",
             data=csv_data,
             file_name=file_name,
             mime="text/csv",
@@ -197,7 +223,7 @@ if uploaded_file is not None:
         mode_col.metric("Mode", mode)
 
         shorltist_cols_to_show = [
-                'Id',
+                id_col,
                 freeform_col,
                 'Usage',
                 'necessity_index',
@@ -225,7 +251,7 @@ if uploaded_file is not None:
         st.markdown("#### Filtered Applications")
         st.write("")
         for idx, row in filtered_df.iterrows():
-            with st.expander(f"Application \#{idx}"):
+            with st.expander(f"Application {row[id_col]}"):
                 st.write("")
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Necessity", f"{row['necessity_index']:.1f}")
