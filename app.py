@@ -7,7 +7,11 @@ import pandas as pd
 import altair as alt
 import joblib
 from io import BytesIO
+from umap import UMAP
+from hdbscan import HDBSCAN
+
 import os
+
 from streamlit_extras.metric_cards import style_metric_cards
 
 # ---- FUNCTIONS ----
@@ -18,6 +22,7 @@ from src.column_detection import detect_freeform_col
 from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
+import src.models.topic_modeling_pipeline as topic_modeling_pipeline
 from typing import Tuple
 
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
@@ -35,6 +40,10 @@ style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_colo
 def load_heartfelt_predictor():
     model_path = os.path.join("src", "models", "heartfelt_pipeline.joblib")
     return joblib.load(model_path)
+
+@st.cache_resource
+def load_embeddings_model():
+    return topic_modeling_pipeline.load_embedding_model('all-MiniLM-L12-v2')
 
 @st.cache_data(show_spinner=True)
 def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
@@ -85,6 +94,11 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
 def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     """Pre‑compute shortlist_score for all rows (used for both modes)."""
     return shortlist_applications(df, k=len(df))
+
+@st.cache_resource(show_spinner=True)
+def run_topic_modeling():
+
+    return topic_modeling_pipeline.bertopic_model(sentences, embeddings, embeddings_model, umap_model, hdbscan_model)
 
 ################################
 # MAIN APP SCRIPT
@@ -252,9 +266,44 @@ if uploaded_file is not None:
             )
 
 
-    ## ------------ INSIGHTS TAB -----------
+    #########################################
+    #              INSIGHTS TAB             #
+    #########################################
 
     with tab2:
+
+        # =========== TOPIC MODELING ============ 
+
+        ## ------- 1. Tokenize texts into sentences -------
+        nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
+
+        sentences = []
+        mappings = []
+
+        for idx, application_text in df[freeform_col].dropna().items():
+            for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
+                sentences.append(sentence)
+                mappings.append(idx)
+
+
+        ## -------- 2. Generate embeddings -------
+
+        embeddings_model = load_embeddings_model()
+        embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
+
+        ## -------- 3. Topic Modeling --------
+
+        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
+        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+
+        topic_model, topics, probs = run_topic_modeling()
+
+        topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
+
+
+        st.dataframe(topic_model.get_topic_info())
+
+
         st.write("")
 
         col1, col2, col3 = st.columns(3)
