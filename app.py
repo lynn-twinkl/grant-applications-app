@@ -23,7 +23,7 @@ from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
 import src.models.topic_modeling_pipeline as topic_modeling_pipeline
-from src.plot_histogram import plot_hist
+from src.px_charts import plot_histogram, plot_topic_countplot
 from typing import Tuple
 
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
@@ -308,17 +308,15 @@ if uploaded_file is not None:
         col3.metric("Total Applications", len(df))
         st.html("<br>")
 
+        ## --- NI Distribution Plot ---
         st.subheader("Necessity Index (NI) Distribution")
-        st.write("")
-        st.write("")
-        # Histogram of necessity index colored by priority labels
-        ni_distribution_plt = plot_hist(df, col_to_plot='necessity_index', bins=20)
-
+        ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50)
         st.plotly_chart(ni_distribution_plt)
 
-        st.dataframe(df, hide_index=True)
 
         # =========== TOPIC MODELING ============ 
+
+        st.subheader("Topic Modeling")
 
         ## ------- 1. Tokenize texts into sentences -------
         nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
@@ -346,8 +344,45 @@ if uploaded_file is not None:
 
         topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
 
+        ## ------- 4. Display Topics Dataframe ------
 
-        st.dataframe(topic_model.get_topic_info())
+        topics_df = topic_model.get_topic_info()
+        topics_df = topics_df[topics_df['Topic'] > -1]
+        topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
+        cols_to_move = ['Topic','CustomName']
+        topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+        topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
+
+        st.markdown("""
+        ### Extracted Topics Table
+        This table shows you the topics that have been extracted from the applications.
+        """)
+
+        with st.expander("How are topic extracted?", icon="❓", expanded=False):
+
+            st.write("""
+            **About Topic Modeling**
+
+            We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
+
+            BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
+
+            The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
+
+            **Table Info**
+            - **Topic Nr.:** The 'id' of the topic.
+            - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
+            - **Representation:** Top 10 keywords that best represent a topic
+            - **Representative Docs**: Sample sentences contributing to the topic
+            """)
+        st.dataframe(topics_df, hide_index=True)
+
+        ## -------- 5. Plot Topics Chart ----------
+
+        topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500)
+
+        st.plotly_chart(topic_count_plot, use_container_width=True)
+
 
 
         
