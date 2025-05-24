@@ -12,7 +12,7 @@ from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 from bertopic import BERTopic
-from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance, OpenAI, PartOfSpeech
+from bertopic.representation import KeyBERTInspired, OpenAI
 
 
 import os
@@ -25,16 +25,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Convert OpenAI Representation to CustomName
 #############################################
 
-def ai_labeles_to_custom_name(model):
-    chatgpt_topic_labels = {topic: " | ".join(list(zip(*values))[0]) for topic, values in model.topic_aspects_["OpenAI"].items()}
-    chatgpt_topic_labels[-1] = "Outlier Topic"
-    model.set_topic_labels(chatgpt_topic_labels)
-
 ###################################
 # HELPER FUNCTIONS
 ###################################
 
-## ---------- LOAD SPACY MODEL -------
+## ---------- LOAD SPACY MODEL ---------
 
 def load_spacy_model(model_name="en_core_web_md"):
     """
@@ -47,6 +42,12 @@ def load_spacy_model(model_name="en_core_web_md"):
 
     return spacy.load(model_name)
 
+## -------- SENTENCE TOKENIZER -------
+
+def spacy_sent_tokenize(text):
+    doc = nlp(text)
+    sentences = [sent.text.strip() for sent in doc.sents]
+    return sentences
 
 ## -------- LOAD TRANSFORMER MODEL -------
 
@@ -116,13 +117,21 @@ def create_openai_model():
             )
             return openai_model
 
+## ---------- AI LABELS TO TOPIC NAME ----------
+
+def ai_labels_to_custom_name(model):
+    chatgpt_topic_labels = {topic: " | ".join(list(zip(*values))[0]) for topic, values in model.topic_aspects_["OpenAI"].items()}
+    chatgpt_topic_labels[-1] = "Outlier Topic"
+    model.set_topic_labels(chatgpt_topic_labels)
+
+
 #############################
 # BERTOPIC MODELING
 #############################
 
 def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_model):
     
-    main_representation_model = MaximalMarginalRelevance(diversity=.3)
+    main_representation_model = KeyBERTInspired()
 
     openai_model = create_openai_model()
 
@@ -135,7 +144,7 @@ def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_mod
     vectorizer_model = CountVectorizer(stop_words=stopwords, ngram_range=(1,2))
 
     topic_model = BERTopic(
-        verbose=true,
+        verbose=True,
         umap_model=_umap_model,
         representation_model=representation_model,
         vectorizer_model=vectorizer_model,
@@ -147,6 +156,8 @@ def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_mod
     topics, probs = topic_model.fit_transform(docs, embeddings)
 
     return topic_model, topics, probs
+
+
 
 
 ##################################
