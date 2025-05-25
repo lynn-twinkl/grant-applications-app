@@ -101,12 +101,10 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=True)
 def run_topic_modeling():
+
     try:
 
-        st.header("Topic Modeling")
-        add_vertical_space(1)
-
-        ## ------- 1. Tokenize texts into sentences -------
+        # ------- 1. Tokenize texts into sentences -------
         nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
 
         sentences = []
@@ -118,27 +116,28 @@ def run_topic_modeling():
                 mappings.append(idx)
 
 
-        ## -------- 2. Generate embeddings -------
+        # -------- 2. Generate embeddings -------
 
         embeddings_model = load_embeddings_model()
         embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
 
-        ## -------- 3. Topic Modeling --------
+        # -------- 3. Topic Modeling --------
 
-        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
+        umap_model = UMAP(n_neighbors=7, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
         hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
 
-        ## --------- 4. Perform Topic Modeling ---------
+        # --------- 4. Perform Topic Modeling ---------
+
         topic_model, topics, probs = topic_modeling_pipeline.bertopic_model(sentences, embeddings, embeddings_model, umap_model, hdbscan_model)
 
         topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) 
 
-        return topic_model, topics, probs
+        return topic_model, topics, probs, mappings
 
     except Exception as e:
         st.error(f"Topic modeling failed: {e}")
         st.code(traceback.format_exc())  # Shows the full error in a nice code box
-        return None, None, None
+        return None, None, None, None
 
 
 
@@ -148,7 +147,7 @@ def run_topic_modeling():
 
 st.title("🪷 Community Collections Helper")
 
-uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv', label_visibility='hidden')
+uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv', label_visibility='collapsed')
 
 
 # ========== FINGERPRINTING CURRENT FILE ==========
@@ -169,7 +168,25 @@ if raw is None:
 ## ====== DATA PROCESSING ======
 
 df, freeform_col, id_col = load_and_process(raw) # from cached function
-topic_model, topics, probs = run_topic_modeling() # from cached function
+topic_model, topics, probs, mappings = run_topic_modeling() # from cached function
+
+if topic_model is not None:
+    label_map = (topic_model
+                 .get_topic_info()
+                 .set_index("Topic")["CustomName"]
+                 .to_dict())
+    df = topic_modeling_pipeline.attach_topics(df, mappings, topics, label_map, col="topics")
+else:
+    st.warning("Topics could not be generated; continuing without them.")
+
+
+topics_df = topic_model.get_topic_info()
+topics_df = topics_df[topics_df['Topic'] > -1]
+topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
+cols_to_move = ['Topic','CustomName']
+topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
+
 
 
 book_candidates_df = df[df['book_candidates'] == True]
@@ -223,6 +240,16 @@ with st.sidebar:
 
     filtered_df = filter_map[selected_view](df, auto_short_df, filter_range)
 
+    ## -------- Topic Filtering -------
+
+    topic_options = sorted(topics_df['Topic Name'].unique())
+    selected_topics = st.multiselect("Filter by Topic(s)", options=topic_options, default=[])
+
+    if selected_topics:
+        selected_set = set(selected_topics)
+        filtered_df = filtered_df[
+            filtered_df['topics'].apply(lambda topic_list: selected_set.issubset(set(topic_list)))
+        ]
 
     st.markdown(f"**Total Applications:** {len(df)}")
     st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
@@ -269,12 +296,14 @@ with tab1:
     csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
     all_processed_data = df.to_csv(index=False).encode("utf-8")
     book_candidates = book_candidates_df.to_csv(index=False).encode("utf-8")
+    topic_descriptions_csv = topics_df.to_csv(index=False).encode("utf-8")
 
 
     csv_options = {
         "Shortlist": (csv_auto, "shortlist.csv"),
         "All Processed Data": (all_processed_data, "all_processed.csv"),
         "Book Candidates": (book_candidates, "book_candidates.csv"),
+        "Topic Descriptions": (topic_descriptions_csv, "topic_descriptions.csv"),
     }
 
     choice = st.selectbox("Select a file for download", list(csv_options.keys()))
@@ -311,6 +340,7 @@ with tab1:
             'vulnerability_score',
             'shortlist_score',
             'is_heartfelt',
+            'topics',
             ]
 
     st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
@@ -333,20 +363,32 @@ with tab1:
                 col3.metric("Severity", f"{int(row['severity_score'])}")
                 col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
 
-                # HTML for clean usage items 
-                usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
                 st.markdown("##### Excerpt")
                 st.write(row[freeform_col])
+
+                # HTML for clean usage items 
+                usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
                 if usage_items:
                     st.markdown("##### Usage")
                     pills_html = "".join(
                             f"<span style='display:inline-block;background-color:#E7F4FF;color:#125E9E;border-radius:20px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
                         for item in usage_items
                     )
-                    st.markdown(pills_html, unsafe_allow_html=True)
+                    st.html(pills_html)
                 else:
                     st.caption("*No usage found*")
-                st.write("")
+
+                topic_items = [item for item in row['topics'] if item and item.lower() != 'none']
+                if topic_items:
+                    st.markdown("##### Topics")
+                    topic_boxes_html= "".join(
+                    f"<span style='display:inline-block;background-color:#ECE0FC;color:#6741B9;border-radius:5px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
+                    for item in topic_items
+                    )
+                    st.html(topic_boxes_html)
+                else:
+                    st.caption("_No topics assigned for this application_")
+
 
                 st.checkbox(
                     "Add to shortlist",
@@ -387,15 +429,12 @@ with tab2:
     st.plotly_chart(ni_distribution_plt)
 
 
+    ## ============= TOPIC MODELING ============
 
-    ## ------- 4. Display Topics Dataframe ------
-
-    topics_df = topic_model.get_topic_info()
-    topics_df = topics_df[topics_df['Topic'] > -1]
-    topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
-    cols_to_move = ['Topic','CustomName']
-    topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
-    topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
+    st.header("Topic Modeling")
+    add_vertical_space(1)
+    
+    ## ------- Display Topics Dataframe ------
 
     with st.popover("How are topic extracted?", icon="🌱"):
 
@@ -416,12 +455,12 @@ with tab2:
         """)
     st.dataframe(topics_df, hide_index=True)
 
-    ## -------- 5. Plot Topics Chart ----------
+    ## -------- Plot Topics Chart ----------
 
     topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
     st.plotly_chart(topic_count_plot, use_container_width=True)
 
-    ## --------- 6. User Updates -----------
+    ## --------- User Updates -----------
 
     if st.session_state.get("topic_toast_shown_for") != st.session_state["current_file_hash"]:
         st.toast(
