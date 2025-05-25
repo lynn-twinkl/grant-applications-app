@@ -1,19 +1,25 @@
 import pandas as pd
 import plotly.express as px
 
-def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 500):
+
+title_font_size=18
+title_font_color='#808393'
+
+def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 500, title:str = None):
 
     plt = px.histogram(
             df,
             x=col_to_plot,
             nbins=bins,
-            title=None,
+            title=title,
             color_discrete_sequence=['#646DEF']
             )
 
     plt.update_layout(
             bargap=0.1,
-            height=height
+            height=height,
+            title_font_size=title_font_size,
+            title_font_color=title_font_color
             )
 
     return plt
@@ -22,7 +28,7 @@ def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 
 # =========== TOPIC DISTRIBUTION CHART  ===========
 
 
-def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_col: str, representation_col: str, height: int = 500):
+def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_col: str, representation_col: str, height: int = 500, title:str = None):
     """
     This functions plots a count chart for Bertopic topics,
     extracting the 5 words of each topic's representation
@@ -37,7 +43,7 @@ def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_
             x=topic_id_col,
             y='Count',
             custom_data=["top_5_words", topic_name_col],
-            title=None,
+            title=title,
             )
 
     plt.update_xaxes(type='category')
@@ -58,7 +64,10 @@ def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_
         hoverlabel=dict(
             font_size=13,
             align="left"
-        )
+        ),
+        title_font_size=title_font_size,
+        title_font_color=title_font_color
+
     )
 
 
