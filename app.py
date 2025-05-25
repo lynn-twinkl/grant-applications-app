@@ -319,9 +319,9 @@ if uploaded_file is not None:
         add_vertical_space(1)
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
+        col1.metric("Applications Submitted", len(df))
         col2.metric("Median N.I", df['necessity_index'].median().round(2))
-        col3.metric("Total Applications", len(df))
+        col3.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
 
         ## --- NI Distribution Plot ---
         ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50)
