@@ -1,4 +1,5 @@
 import openai
+import pandas as pd
 import numpy as np
 import streamlit as st
 import re
@@ -164,19 +165,24 @@ def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_mod
 # TOPIC TO DATAFRAME MAPPING
 #################################
 
-def update_df_with_topics(df, mapping, sentence_topics, topic_label_map):
-    topics_by_row = {}
-    for i, row_idx in enumerate(mapping):
-        topic = sentence_topics[i]
-        topics_by_row.setdefault(row_idx, set()).add(topic)
-    
-    updated_df = df.copy()
-    
-    def map_topics(row_idx):
-        topic_ids = topics_by_row.get(row_idx, set())
-        topic_names = [topic_label_map.get(t, str(t)) for t in topic_ids if t != -1]
-        return ", ".join(sorted(topic_names))
-    
-    updated_df['Topics'] = updated_df.index.map(map_topics)
-    return updated_df
+
+def attach_topics(
+    df, mappings, sentence_topics, label_map, col="topics", drop_outlier=True
+):
+    import pandas as pd  # in case it's not already imported
+
+    s = (
+        pd.DataFrame({"row": mappings, "topic": sentence_topics})
+        .query("topic != -1") if drop_outlier else
+        pd.DataFrame({"row": mappings, "topic": sentence_topics})
+    )
+
+    # Group topics per row and make list of labels
+    topics_list = (
+        s.groupby("row")["topic"]
+        .agg(lambda ids: sorted({label_map.get(i, str(i)) for i in ids}))
+    )
+
+    # Assign the lists to the column, fill missing with empty list
+    return df.assign(**{col: topics_list.reindex(df.index).apply(lambda x: x if isinstance(x, list) else [])})
 
