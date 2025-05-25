@@ -8,7 +8,7 @@ def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 
             x=col_to_plot,
             nbins=bins,
             title=None,
-            color_discrete_sequence=['#a7d6fd']
+            color_discrete_sequence=['#646DEF']
             )
 
     plt.update_layout(
@@ -40,8 +40,10 @@ def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_
             title=None,
             )
 
+    plt.update_xaxes(type='category')
+
     plt.update_traces(
-        marker_color='#FFA500',
+        marker_color='#EF64B3',
         textposition='outside',
         hovertemplate=(
             'Topic Name: %{customdata[1]}<br>'
@@ -54,9 +56,11 @@ def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_
         uniformtext_minsize=10,
         height=height,
         hoverlabel=dict(
-            font_size=14
+            font_size=13,
+            align="left"
         )
     )
+
 
 
     return plt
