@@ -13,6 +13,7 @@ from hdbscan import HDBSCAN
 import os
 
 from streamlit_extras.metric_cards import style_metric_cards
+from streamlit_extras.add_vertical_space import add_vertical_space
 
 # ---- FUNCTIONS ----
 
@@ -107,7 +108,8 @@ def run_topic_modeling():
 # MAIN APP SCRIPT
 ################################
 
-st.title("Community Collections Helper")
+st.title("🪷 Community Collections Helper")
+st.badge("Version 1.0.0", icon=':material/category:',color='violet')
 
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv')
 
@@ -122,7 +124,7 @@ if uploaded_file is not None:
     book_candidates_df = df[df['book_candidates'] == True]
 
     ###############################
-    #           SIDEBAR           #
+    #         SIDE PANNEL         #
     ###############################
 
     with st.sidebar:
@@ -143,7 +145,7 @@ if uploaded_file is not None:
         st.title("Filters")
 
         ## --- Dataframe To Filter ---
-        options = ['All applications', 'Not shortlisted']
+        options = ['All applications', 'Not shortlisted'] 
         selected_view = st.pills('Choose data to filter', options, default='Not shortlisted')
         st.write("")
 
@@ -187,7 +189,7 @@ if uploaded_file is not None:
         
         ## =========== AUTOMATIC SHORTLIST =========
 
-        st.header("✨ Automatic Shortlist")
+        st.header("Automatic Shortlist")
 
         csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
         all_processed_data = df.to_csv(index=False).encode("utf-8")
@@ -239,58 +241,69 @@ if uploaded_file is not None:
 
         ## ====== APPLICATIONS REVIEW =======
 
-        st.divider()
-        st.header("🌸 Manual Filtering")
-        st.markdown(
-                """
-                Below you'll find applications that **did not** make it into the shortlist for you to manually review or append to the shortlist if desired.
+        add_vertical_space(2)
+        st.header("Manual Filtering")
+        st.info("Use the **side panel** filters to more easily sort through applications that you'd like to review.", icon=':material/info:')
 
-                You may use the **side panel** filters to more easily sort through applications that you'd like to review.
-                """
-                )
-
-        st.markdown("#### Filtered Applications")
         st.write("")
-        for idx, row in filtered_df.iterrows():
-            with st.expander(f"Application {row[id_col]}"):
-                st.write("")
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Necessity", f"{row['necessity_index']:.1f}")
-                col2.metric("Urgency", f"{int(row['urgency_score'])}")
-                col3.metric("Severity", f"{int(row['severity_score'])}")
-                col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
+        if len(filtered_df) > 0:
+            st.markdown("#### Filtered Applications")
+            for idx, row in filtered_df.iterrows():
+                with st.expander(f"Application {row[id_col]}"):
+                    st.write("")
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Necessity", f"{row['necessity_index']:.1f}")
+                    col2.metric("Urgency", f"{int(row['urgency_score'])}")
+                    col3.metric("Severity", f"{int(row['severity_score'])}")
+                    col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
 
-                # HTML for clean usage items 
-                usage_items = [item for item in row['Usage'] if item and item.lower() != 'none']
-                st.markdown("##### Excerpt")
-                st.write(row[freeform_col])
-                if usage_items:
-                    st.markdown("##### Usage")
-                    pills_html = "".join(
-                            f"<span style='display:inline-block;background-color:#E7F4FF;color:#125E9E;border-radius:20px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
-                        for item in usage_items
+                    # HTML for clean usage items 
+                    usage_items = [item for item in row['Usage'] if item and item.lower() != 'none']
+                    st.markdown("##### Excerpt")
+                    st.write(row[freeform_col])
+                    if usage_items:
+                        st.markdown("##### Usage")
+                        pills_html = "".join(
+                                f"<span style='display:inline-block;background-color:#E7F4FF;color:#125E9E;border-radius:20px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
+                            for item in usage_items
+                        )
+                        st.markdown(pills_html, unsafe_allow_html=True)
+                    else:
+                        st.caption("*No usage found*")
+                    st.write("")
+
+                    st.checkbox(
+                        "Add to shortlist",
+                        key=f"shortlist_{idx}"
                     )
-                    st.markdown(pills_html, unsafe_allow_html=True)
-                else:
-                    st.caption("*No usage found*")
-                st.write("")
 
-                st.checkbox(
-                    "Add to shortlist",
-                    key=f"shortlist_{idx}"
-                )
+        else:
+            st.markdown(
+                """
+                <br>
+                <div style="text-align: center; font-size: 1.2em">
+                    🍂 <span style="color: grey;">No applications matched these filters...</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         # ======== SHORTLIST SUMMARY AND DOWNLOAD (MANUAL) ======
         shortlisted = [
             i for i in filtered_df.index
             if st.session_state.get(f"shortlist_{i}", False)
         ]
-        st.sidebar.markdown(f"**Manual Shortlisted:** {len(shortlisted)}")
+        st.sidebar.markdown(f"**Manually Shortlisted:** {len(shortlisted)}")
         if shortlisted:
             csv = df.loc[shortlisted].to_csv(index=False).encode('utf-8')
             st.sidebar.download_button(
                 "Download Manual Shortlist", csv, "shortlist.csv", "text/csv"
             )
+
+
+        add_vertical_space(5)
+        st.divider()
+        st.markdown(":grey[Made with 🩷  by the AI Innovation team &nbsp; | &nbsp; Contact: lynn.perez@twinkl.com]")
 
 
     #########################################
@@ -299,24 +312,33 @@ if uploaded_file is not None:
 
     with tab2:
 
+
         ## =========== DATA OVERVIEW ==========
-        st.write("")
+
+        st.header("General Insights")
+        add_vertical_space(1)
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
         col2.metric("Median N.I", df['necessity_index'].median().round(2))
         col3.metric("Total Applications", len(df))
-        st.html("<br>")
 
         ## --- NI Distribution Plot ---
-        st.subheader("Necessity Index (NI) Distribution")
         ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50)
         st.plotly_chart(ni_distribution_plt)
 
 
+
+
+        
+
+
+
+
         # =========== TOPIC MODELING ============ 
 
-        st.subheader("Topic Modeling")
+        st.header("Topic Modeling")
+        add_vertical_space(1)
 
         ## ------- 1. Tokenize texts into sentences -------
         nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
@@ -353,12 +375,7 @@ if uploaded_file is not None:
         topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
         topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
 
-        st.markdown("""
-        ### Extracted Topics Table
-        This table shows you the topics that have been extracted from the applications.
-        """)
-
-        with st.expander("How are topic extracted?", icon="❓", expanded=False):
+        with st.expander("How are topic extracted?", icon="🌱", expanded=False):
 
             st.write("""
             **About Topic Modeling**
@@ -382,7 +399,5 @@ if uploaded_file is not None:
         topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500)
 
         st.plotly_chart(topic_count_plot, use_container_width=True)
-
-
 
         
