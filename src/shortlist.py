@@ -61,7 +61,7 @@ def shortlist_applications(
             if isinstance(item, str) and item.strip() and item.strip().lower() != "none"
         )
 
-    usage_counts = df["Usage"].apply(count_valid_usage)
+    usage_counts = df["usage"].apply(count_valid_usage)
 
     min_uc, max_uc = usage_counts.min(), usage_counts.max()
     if max_uc != min_uc:
