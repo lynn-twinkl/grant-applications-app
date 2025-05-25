@@ -355,7 +355,7 @@ with tab1:
     if len(filtered_df) > 0:
         st.markdown("#### Filtered Applications")
         for idx, row in filtered_df.iterrows():
-            with st.expander(f"Application {row[id_col]}"):
+            with st.expander(f"Application {int(row[id_col])}"):
                 st.write("")
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Necessity", f"{row['necessity_index']:.1f}")
