@@ -30,7 +30,7 @@ from typing import Tuple
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
 
 ##################################
-# CACHED PROCESSING FUNCTION
+# CACHED PROCESSING FUNCTIONS
 ##################################
 
 # -----------------------------------------------------------------------------
@@ -101,8 +101,46 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=True)
 def run_topic_modeling():
+    try:
 
-    return topic_modeling_pipeline.bertopic_model(sentences, embeddings, embeddings_model, umap_model, hdbscan_model)
+        st.header("Topic Modeling")
+        add_vertical_space(1)
+
+        ## ------- 1. Tokenize texts into sentences -------
+        nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
+
+        sentences = []
+        mappings = []
+
+        for idx, application_text in df[freeform_col].dropna().items():
+            for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
+                sentences.append(sentence)
+                mappings.append(idx)
+
+
+        ## -------- 2. Generate embeddings -------
+
+        embeddings_model = load_embeddings_model()
+        embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
+
+        ## -------- 3. Topic Modeling --------
+
+        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
+        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+
+        ## --------- 4. Perform Topic Modeling ---------
+        topic_model, topics, probs = topic_modeling_pipeline.bertopic_model(sentences, embeddings, embeddings_model, umap_model, hdbscan_model)
+
+        topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) 
+
+        return topic_model, topics, probs
+
+    except Exception as e:
+        st.error(f"Topic modeling failed: {e}")
+        st.code(traceback.format_exc())  # Shows the full error in a nice code box
+        return None, None, None
+
+
 
 ################################
 # MAIN APP SCRIPT
@@ -113,10 +151,12 @@ st.title("🪷 Community Collections Helper")
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv', label_visibility='hidden')
 
 
-# ====== Fingerprinting current file to avoid unncesssary reruns =====
+# ========== FINGERPRINTING CURRENT FILE ==========
+# This helps avoid reruns of certain functions as
+# long as the file stays the same
 
 if uploaded_file is not None:
-    raw = uploaded_file.read()                 # ← single read
+    raw = uploaded_file.read()
     file_hash = hashlib.md5(raw).hexdigest()
     st.session_state["current_file_hash"] = file_hash
 else:
@@ -126,9 +166,11 @@ else:
 if raw is None:
     st.stop()
 
-## ====== PROCESSED DATA (CACHED) ======
+## ====== DATA PROCESSING ======
 
-df, freeform_col, id_col = load_and_process(raw)
+df, freeform_col, id_col = load_and_process(raw) # from cached function
+topic_model, topics, probs = run_topic_modeling() # from cached function
+
 
 book_candidates_df = df[df['book_candidates'] == True]
 
@@ -345,85 +387,48 @@ with tab2:
     st.plotly_chart(ni_distribution_plt)
 
 
-    # =========== TOPIC MODELING ============ 
 
-    try:
+    ## ------- 4. Display Topics Dataframe ------
 
-        st.header("Topic Modeling")
-        add_vertical_space(1)
+    topics_df = topic_model.get_topic_info()
+    topics_df = topics_df[topics_df['Topic'] > -1]
+    topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
+    cols_to_move = ['Topic','CustomName']
+    topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+    topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
 
-        ## ------- 1. Tokenize texts into sentences -------
-        nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
+    with st.popover("How are topic extracted?", icon="🌱"):
 
-        sentences = []
-        mappings = []
+        st.write("""
+        **About Topic Modeling**
 
-        for idx, application_text in df[freeform_col].dropna().items():
-            for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
-                sentences.append(sentence)
-                mappings.append(idx)
+        We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
 
+        BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
 
-        ## -------- 2. Generate embeddings -------
+        The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
 
-        embeddings_model = load_embeddings_model()
-        embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
+        **Table Info**
+        - **Topic Nr.:** The 'id' of the topic.
+        - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
+        - **Representation:** Top 10 keywords that best represent a topic
+        - **Representative Docs**: Sample sentences contributing to the topic
+        """)
+    st.dataframe(topics_df, hide_index=True)
 
-        ## -------- 3. Topic Modeling --------
+    ## -------- 5. Plot Topics Chart ----------
 
-        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
-        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+    topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
+    st.plotly_chart(topic_count_plot, use_container_width=True)
 
-        # Run topic modeling from cached resource
-        topic_model, topics, probs = run_topic_modeling()
+    ## --------- 6. User Updates -----------
 
-        topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
+    if st.session_state.get("topic_toast_shown_for") != st.session_state["current_file_hash"]:
+        st.toast(
+        """
+        **Topic modeling is ready!** View the results on the _Insights_ tab
+        """,
+        icon='🎉'
+        )
 
-
-        ## ------- 4. Display Topics Dataframe ------
-
-        topics_df = topic_model.get_topic_info()
-        topics_df = topics_df[topics_df['Topic'] > -1]
-        topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
-        cols_to_move = ['Topic','CustomName']
-        topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
-        topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
-
-        with st.popover("How are topic extracted?", icon="🌱"):
-
-            st.write("""
-            **About Topic Modeling**
-
-            We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
-
-            BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
-
-            The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
-
-            **Table Info**
-            - **Topic Nr.:** The 'id' of the topic.
-            - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
-            - **Representation:** Top 10 keywords that best represent a topic
-            - **Representative Docs**: Sample sentences contributing to the topic
-            """)
-        st.dataframe(topics_df, hide_index=True)
-
-        ## -------- 5. Plot Topics Chart ----------
-
-        topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
-        st.plotly_chart(topic_count_plot, use_container_width=True)
-
-        ## --------- 6. User Updates -----------
-
-        if st.session_state.get("topic_toast_shown_for") != st.session_state["current_file_hash"]:
-            st.toast(
-            """
-            **Topic modeling is ready!** View the results on the _Insights_ tab
-            """,
-            icon='🎉'
-            )
-
-            st.session_state["topic_toast_shown_for"] = st.session_state["current_file_hash"]
-
-    except Exception as e:
-        st.error(f"Topic modeling failed: {str(e)}")
+        st.session_state["topic_toast_shown_for"] = st.session_state["current_file_hash"]
