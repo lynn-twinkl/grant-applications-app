@@ -31,7 +31,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 ## ---------- LOAD SPACY MODEL ---------
 
-def load_spacy_model(model_name="en_core_web_md"):
+def load_spacy_model(model_name="en_core_web_sm"):
     """
     This model is used for sentence tokenization
     as well as stopword generation
