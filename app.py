@@ -83,7 +83,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
-    scored['Usage'] = extract_usage(docs)
+    scored['usage'] = extract_usage(docs)
 
     return scored, freeform_col, id_col
 
@@ -109,9 +109,8 @@ def run_topic_modeling():
 ################################
 
 st.title("🪷 Community Collections Helper")
-st.badge("Version 1.0.0", icon=':material/category:',color='violet')
 
-uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv')
+uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv', label_visibility='hidden')
 
 if uploaded_file is not None:
     # Read file from raw bytes for caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
@@ -152,7 +151,7 @@ if uploaded_file is not None:
         ## --- Necessity Index Filtering ---
         min_idx = float(df['necessity_index'].min())
         max_idx = float(df['necessity_index'].max())
-        filter_range = st.sidebar.slider(
+        filter_range = st.slider(
             "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
         )
         
@@ -175,6 +174,30 @@ if uploaded_file is not None:
 
         st.markdown(f"**Total Applications:** {len(df)}")
         st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
+
+        manual_keys = [k for k in st.session_state.keys() if k.startswith("shortlist_")]
+        manually_shortlisted = [int(k.split("_")[1]) for k in manual_keys if st.session_state[k]]
+
+        st.markdown(f"**Manually Shortlisted:** {len(manually_shortlisted)}")
+        if manually_shortlisted:
+            csv = df.loc[manually_shortlisted].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download Manual Shortlist",
+                data=csv,
+                file_name="manual_shortlist.csv",
+                mime="text/csv",
+                icon="⬇️",
+            )
+
+
+        add_vertical_space(4)
+        st.divider()
+        st.badge("Version 1.0.0", icon=':material/category:',color='violet')
+        st.caption("""
+        Made with 🩷  by the AI Innovation Team
+        Contact: lynn.perez@twinkl.com
+        """)
+
 
 
     ## ====== CREATE TAB SECTIONS =======
@@ -228,13 +251,14 @@ if uploaded_file is not None:
         shorltist_cols_to_show = [
                 id_col,
                 freeform_col,
-                'Usage',
+                'book_candidates',
+                'usage',
                 'necessity_index',
                 'urgency_score',
                 'severity_score',
                 'vulnerability_score',
                 'shortlist_score',
-                'book_candidates',
+                'is_heartfelt',
                 ]
 
         st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
@@ -258,7 +282,7 @@ if uploaded_file is not None:
                     col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
 
                     # HTML for clean usage items 
-                    usage_items = [item for item in row['Usage'] if item and item.lower() != 'none']
+                    usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
                     st.markdown("##### Excerpt")
                     st.write(row[freeform_col])
                     if usage_items:
@@ -288,23 +312,6 @@ if uploaded_file is not None:
                 unsafe_allow_html=True,
             )
 
-        # ======== SHORTLIST SUMMARY AND DOWNLOAD (MANUAL) ======
-        shortlisted = [
-            i for i in filtered_df.index
-            if st.session_state.get(f"shortlist_{i}", False)
-        ]
-        st.sidebar.markdown(f"**Manually Shortlisted:** {len(shortlisted)}")
-        if shortlisted:
-            csv = df.loc[shortlisted].to_csv(index=False).encode('utf-8')
-            st.sidebar.download_button(
-                "Download Manual Shortlist", csv, "shortlist.csv", "text/csv"
-            )
-
-
-        add_vertical_space(5)
-        st.divider()
-        st.markdown(":grey[Made with 🩷  by the AI Innovation team &nbsp; | &nbsp; Contact: lynn.perez@twinkl.com]")
-
 
     #########################################
     #              INSIGHTS TAB             #
@@ -324,80 +331,86 @@ if uploaded_file is not None:
         col3.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
 
         ## --- NI Distribution Plot ---
-        ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50)
+        ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50, title='Necessity Index Histogram')
         st.plotly_chart(ni_distribution_plt)
-
-
-
-
-        
-
-
 
 
         # =========== TOPIC MODELING ============ 
 
-        st.header("Topic Modeling")
-        add_vertical_space(1)
+        try:
 
-        ## ------- 1. Tokenize texts into sentences -------
-        nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
+            st.header("Topic Modeling")
+            add_vertical_space(1)
 
-        sentences = []
-        mappings = []
+            ## ------- 1. Tokenize texts into sentences -------
+            nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
 
-        for idx, application_text in df[freeform_col].dropna().items():
-            for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
-                sentences.append(sentence)
-                mappings.append(idx)
+            sentences = []
+            mappings = []
+
+            for idx, application_text in df[freeform_col].dropna().items():
+                for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
+                    sentences.append(sentence)
+                    mappings.append(idx)
 
 
-        ## -------- 2. Generate embeddings -------
+            ## -------- 2. Generate embeddings -------
 
-        embeddings_model = load_embeddings_model()
-        embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
+            embeddings_model = load_embeddings_model()
+            embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
 
-        ## -------- 3. Topic Modeling --------
+            ## -------- 3. Topic Modeling --------
 
-        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
-        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+            umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
+            hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
 
-        topic_model, topics, probs = run_topic_modeling()
+            # Run topic modeling from cached resource
+            topic_model, topics, probs = run_topic_modeling()
 
-        topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
+            topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
 
-        ## ------- 4. Display Topics Dataframe ------
 
-        topics_df = topic_model.get_topic_info()
-        topics_df = topics_df[topics_df['Topic'] > -1]
-        topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
-        cols_to_move = ['Topic','CustomName']
-        topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
-        topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
+            ## ------- 4. Display Topics Dataframe ------
 
-        with st.expander("How are topic extracted?", icon="🌱", expanded=False):
+            topics_df = topic_model.get_topic_info()
+            topics_df = topics_df[topics_df['Topic'] > -1]
+            topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
+            cols_to_move = ['Topic','CustomName']
+            topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+            topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
 
-            st.write("""
-            **About Topic Modeling**
+            with st.popover("How are topic extracted?", icon="🌱"):
 
-            We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
+                st.write("""
+                **About Topic Modeling**
 
-            BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
+                We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
 
-            The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
+                BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
 
-            **Table Info**
-            - **Topic Nr.:** The 'id' of the topic.
-            - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
-            - **Representation:** Top 10 keywords that best represent a topic
-            - **Representative Docs**: Sample sentences contributing to the topic
-            """)
-        st.dataframe(topics_df, hide_index=True)
+                The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
 
-        ## -------- 5. Plot Topics Chart ----------
+                **Table Info**
+                - **Topic Nr.:** The 'id' of the topic.
+                - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
+                - **Representation:** Top 10 keywords that best represent a topic
+                - **Representative Docs**: Sample sentences contributing to the topic
+                """)
+            st.dataframe(topics_df, hide_index=True)
 
-        topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500)
+            ## -------- 5. Plot Topics Chart ----------
 
-        st.plotly_chart(topic_count_plot, use_container_width=True)
+            topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
+            st.plotly_chart(topic_count_plot, use_container_width=True)
 
-        
+            ## --------- 6. User Updates -----------
+
+            st.toast(
+            """
+            **Topic modeling is ready!** View the results on the _Insights_ tab
+            """,
+            icon='🎉'
+            )
+
+        except Exception as e:
+            st.error(f"Topic modeling failed: {str(e)}")
