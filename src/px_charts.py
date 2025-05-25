@@ -1,9 +1,15 @@
+# ========= CONFIGURATION ==========
 import pandas as pd
 import plotly.express as px
 
 
-title_font_size=18
+title_font_size=20
 title_font_color='#808393'
+xaxis_title_font_size=16
+yaxis_title_font_size=16
+
+
+# ======== FUNCTIONS ========
 
 def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 500, title:str = None):
 
@@ -19,7 +25,10 @@ def plot_histogram(df: pd.DataFrame, col_to_plot: str, bins: int, height: int = 
             bargap=0.1,
             height=height,
             title_font_size=title_font_size,
-            title_font_color=title_font_color
+            title_font_color=title_font_color,
+            xaxis_title_font_size=xaxis_title_font_size,
+            yaxis_title_font_size=yaxis_title_font_size,
+
             )
 
     return plt
@@ -52,22 +61,22 @@ def plot_topic_countplot(topics_df: pd.DataFrame, topic_id_col: str, topic_name_
         marker_color='#EF64B3',
         textposition='outside',
         hovertemplate=(
-            'Topic Name: %{customdata[1]}<br>'
-            'Frequency: %{y}<br>'
-            'Top 5 words: %{customdata[0]}<extra></extra>'
+            '<b>Topic Name</b>: %{customdata[1]}<br>'
+            '<b>Frequency:</b> %{y}<br>'
+            '<b>Top 5 words:</b> %{customdata[0]}<extra></extra>'
             )
         )
 
     plt.update_layout(
-        uniformtext_minsize=10,
         height=height,
         hoverlabel=dict(
             font_size=13,
             align="left"
         ),
         title_font_size=title_font_size,
-        title_font_color=title_font_color
-
+        title_font_color=title_font_color,
+        xaxis_title_font_size=xaxis_title_font_size,
+        yaxis_title_font_size=yaxis_title_font_size,
     )
 
 
