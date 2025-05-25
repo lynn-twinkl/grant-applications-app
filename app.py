@@ -4,7 +4,7 @@
 
 import streamlit as st
 import pandas as pd
-import altair as alt
+import hashlib
 import joblib
 from io import BytesIO
 from umap import UMAP
@@ -112,299 +112,310 @@ st.title("🪷 Community Collections Helper")
 
 uploaded_file = st.file_uploader("Upload grant applications file for analysis", type='csv', label_visibility='hidden')
 
+
+# ====== Fingerprinting current file to avoid unncesssary reruns =====
+
 if uploaded_file is not None:
-    # Read file from raw bytes for caching and repeated use --> this ensure all the processing isn't repeated when a user changes the filters
-    raw = uploaded_file.read()
+    raw = uploaded_file.read()                 # ← single read
+    file_hash = hashlib.md5(raw).hexdigest()
+    st.session_state["current_file_hash"] = file_hash
+else:
+    raw = None
+    st.session_state.pop("current_file_hash", None)
 
-    ## ====== PROCESSED DATA (CACHED) ======
+if raw is None:
+    st.stop()
 
-    df, freeform_col, id_col = load_and_process(raw)
+## ====== PROCESSED DATA (CACHED) ======
 
-    book_candidates_df = df[df['book_candidates'] == True]
+df, freeform_col, id_col = load_and_process(raw)
 
-    ###############################
-    #         SIDE PANNEL         #
-    ###############################
+book_candidates_df = df[df['book_candidates'] == True]
 
-    with st.sidebar:
-        st.title("Shortlist Mode")
+###############################
+#         SIDE PANNEL         #
+###############################
+
+with st.sidebar:
+    st.title("Shortlist Mode")
 
 
-        quantile_map = {"strict": 0.75, "generous": 0.5}
-        mode = st.segmented_control(
-                "Select one option",
-                options=["strict", "generous"],
-                default="strict",
-                )
-        
-        scored_full = compute_shortlist(df)
-        threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
-        auto_short_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
+    quantile_map = {"strict": 0.75, "generous": 0.5}
+    mode = st.segmented_control(
+            "Select one option",
+            options=["strict", "generous"],
+            default="strict",
+            )
+    
+    scored_full = compute_shortlist(df)
+    threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
+    auto_short_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
 
-        st.title("Filters")
+    st.title("Filters")
 
-        ## --- Dataframe To Filter ---
-        options = ['All applications', 'Not shortlisted'] 
-        selected_view = st.pills('Choose data to filter', options, default='Not shortlisted')
-        st.write("")
+    ## --- Dataframe To Filter ---
+    options = ['All applications', 'Not shortlisted'] 
+    selected_view = st.pills('Choose data to filter', options, default='Not shortlisted')
+    st.write("")
 
-        ## --- Necessity Index Filtering ---
-        min_idx = float(df['necessity_index'].min())
-        max_idx = float(df['necessity_index'].max())
-        filter_range = st.slider(
-            "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
+    ## --- Necessity Index Filtering ---
+    min_idx = float(df['necessity_index'].min())
+    max_idx = float(df['necessity_index'].max())
+    filter_range = st.slider(
+        "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
+    )
+    
+    def filter_all_applications(df, auto_short_df, filter_range):
+        return df[df['necessity_index'].between(filter_range[0], filter_range[1])]
+
+    def filter_not_shortlisted(df, auto_short_df, filter_range):
+        return df[
+            (~df.index.isin(auto_short_df.index)) &
+            (df['necessity_index'].between(filter_range[0], filter_range[1]))
+        ]
+
+    filter_map = {
+            'All applications': filter_all_applications,
+            'Not shortlisted': filter_not_shortlisted,
+            }
+
+    filtered_df = filter_map[selected_view](df, auto_short_df, filter_range)
+
+
+    st.markdown(f"**Total Applications:** {len(df)}")
+    st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
+
+    manual_keys = [k for k in st.session_state.keys() if k.startswith("shortlist_")]
+    manually_shortlisted = [int(k.split("_")[1]) for k in manual_keys if st.session_state[k]]
+
+    st.markdown(f"**Manually Shortlisted:** {len(manually_shortlisted)}")
+    if manually_shortlisted:
+        csv = df.loc[manually_shortlisted].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download Manual Shortlist",
+            data=csv,
+            file_name="manual_shortlist.csv",
+            mime="text/csv",
+            icon="⬇️",
         )
-        
-        def filter_all_applications(df, auto_short_df, filter_range):
-            return df[df['necessity_index'].between(filter_range[0], filter_range[1])]
 
-        def filter_not_shortlisted(df, auto_short_df, filter_range):
-            return df[
-                (~df.index.isin(auto_short_df.index)) &
-                (df['necessity_index'].between(filter_range[0], filter_range[1]))
+
+    add_vertical_space(4)
+    st.divider()
+    st.badge("Version 1.0.0", icon=':material/category:',color='violet')
+    st.markdown("""
+    :grey[Made with 🩷  by the AI Innovation Team
+    Contact: lynn.perez@twinkl.com]
+    """)
+
+
+
+## ====== CREATE TAB SECTIONS =======
+tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
+
+
+##################################################
+#              SHORTLIST MANAGER TAB             # 
+##################################################
+
+with tab1:
+    
+    ## =========== AUTOMATIC SHORTLIST =========
+
+    st.header("Automatic Shortlist")
+
+    csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
+    all_processed_data = df.to_csv(index=False).encode("utf-8")
+    book_candidates = book_candidates_df.to_csv(index=False).encode("utf-8")
+
+
+    csv_options = {
+        "Shortlist": (csv_auto, "shortlist.csv"),
+        "All Processed Data": (all_processed_data, "all_processed.csv"),
+        "Book Candidates": (book_candidates, "book_candidates.csv"),
+    }
+
+    choice = st.selectbox("Select a file for download", list(csv_options.keys()))
+
+    csv_data, file_name = csv_options[choice]
+
+
+    st.download_button(
+        label=f"Download {choice}",
+        data=csv_data,
+        file_name=file_name,
+        mime="text/csv",
+        help="This button will download the selected file from above",
+        icon="⬇️"
+
+    )
+
+    
+    st.write("")
+    total_col, shortlistCounter_col, mode_col = st.columns(3)
+
+    total_col.metric("Applications Submitted", len(df))
+    shortlistCounter_col.metric("Shorlist Length",  len(auto_short_df))
+    mode_col.metric("Mode", mode)
+
+    shorltist_cols_to_show = [
+            id_col,
+            freeform_col,
+            'book_candidates',
+            'usage',
+            'necessity_index',
+            'urgency_score',
+            'severity_score',
+            'vulnerability_score',
+            'shortlist_score',
+            'is_heartfelt',
             ]
 
-        filter_map = {
-                'All applications': filter_all_applications,
-                'Not shortlisted': filter_not_shortlisted,
-                }
+    st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
 
-        filtered_df = filter_map[selected_view](df, auto_short_df, filter_range)
+    ## ====== APPLICATIONS REVIEW =======
 
+    add_vertical_space(2)
+    st.header("Manual Filtering")
+    st.info("Use the **side panel** filters to more easily sort through applications that you'd like to review.", icon=':material/info:')
 
-        st.markdown(f"**Total Applications:** {len(df)}")
-        st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
+    st.write("")
+    if len(filtered_df) > 0:
+        st.markdown("#### Filtered Applications")
+        for idx, row in filtered_df.iterrows():
+            with st.expander(f"Application {row[id_col]}"):
+                st.write("")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Necessity", f"{row['necessity_index']:.1f}")
+                col2.metric("Urgency", f"{int(row['urgency_score'])}")
+                col3.metric("Severity", f"{int(row['severity_score'])}")
+                col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
 
-        manual_keys = [k for k in st.session_state.keys() if k.startswith("shortlist_")]
-        manually_shortlisted = [int(k.split("_")[1]) for k in manual_keys if st.session_state[k]]
+                # HTML for clean usage items 
+                usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
+                st.markdown("##### Excerpt")
+                st.write(row[freeform_col])
+                if usage_items:
+                    st.markdown("##### Usage")
+                    pills_html = "".join(
+                            f"<span style='display:inline-block;background-color:#E7F4FF;color:#125E9E;border-radius:20px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
+                        for item in usage_items
+                    )
+                    st.markdown(pills_html, unsafe_allow_html=True)
+                else:
+                    st.caption("*No usage found*")
+                st.write("")
 
-        st.markdown(f"**Manually Shortlisted:** {len(manually_shortlisted)}")
-        if manually_shortlisted:
-            csv = df.loc[manually_shortlisted].to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download Manual Shortlist",
-                data=csv,
-                file_name="manual_shortlist.csv",
-                mime="text/csv",
-                icon="⬇️",
-            )
+                st.checkbox(
+                    "Add to shortlist",
+                    key=f"shortlist_{idx}"
+                )
 
-
-        add_vertical_space(4)
-        st.divider()
-        st.badge("Version 1.0.0", icon=':material/category:',color='violet')
-        st.caption("""
-        Made with 🩷  by the AI Innovation Team
-        Contact: lynn.perez@twinkl.com
-        """)
-
-
-
-    ## ====== CREATE TAB SECTIONS =======
-    tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
-
-
-    ##################################################
-    #              SHORTLIST MANAGER TAB             # 
-    ##################################################
-
-    with tab1:
-        
-        ## =========== AUTOMATIC SHORTLIST =========
-
-        st.header("Automatic Shortlist")
-
-        csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
-        all_processed_data = df.to_csv(index=False).encode("utf-8")
-        book_candidates = book_candidates_df.to_csv(index=False).encode("utf-8")
-
-
-        csv_options = {
-            "Shortlist": (csv_auto, "shortlist.csv"),
-            "All Processed Data": (all_processed_data, "all_processed.csv"),
-            "Book Candidates": (book_candidates, "book_candidates.csv"),
-        }
-
-        choice = st.selectbox("Select a file for download", list(csv_options.keys()))
-
-        csv_data, file_name = csv_options[choice]
-
-
-        st.download_button(
-            label=f"Download {choice}",
-            data=csv_data,
-            file_name=file_name,
-            mime="text/csv",
-            help="This button will download the selected file from above",
-            icon="⬇️"
-
+    else:
+        st.markdown(
+            """
+            <br>
+            <div style="text-align: center; font-size: 1.2em">
+                🍂 <span style="color: grey;">No applications matched these filters...</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        
-        st.write("")
-        total_col, shortlistCounter_col, mode_col = st.columns(3)
 
-        total_col.metric("Applications Submitted", len(df))
-        shortlistCounter_col.metric("Shorlist Length",  len(auto_short_df))
-        mode_col.metric("Mode", mode)
+#########################################
+#              INSIGHTS TAB             #
+#########################################
 
-        shorltist_cols_to_show = [
-                id_col,
-                freeform_col,
-                'book_candidates',
-                'usage',
-                'necessity_index',
-                'urgency_score',
-                'severity_score',
-                'vulnerability_score',
-                'shortlist_score',
-                'is_heartfelt',
-                ]
-
-        st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
-
-        ## ====== APPLICATIONS REVIEW =======
-
-        add_vertical_space(2)
-        st.header("Manual Filtering")
-        st.info("Use the **side panel** filters to more easily sort through applications that you'd like to review.", icon=':material/info:')
-
-        st.write("")
-        if len(filtered_df) > 0:
-            st.markdown("#### Filtered Applications")
-            for idx, row in filtered_df.iterrows():
-                with st.expander(f"Application {row[id_col]}"):
-                    st.write("")
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("Necessity", f"{row['necessity_index']:.1f}")
-                    col2.metric("Urgency", f"{int(row['urgency_score'])}")
-                    col3.metric("Severity", f"{int(row['severity_score'])}")
-                    col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
-
-                    # HTML for clean usage items 
-                    usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
-                    st.markdown("##### Excerpt")
-                    st.write(row[freeform_col])
-                    if usage_items:
-                        st.markdown("##### Usage")
-                        pills_html = "".join(
-                                f"<span style='display:inline-block;background-color:#E7F4FF;color:#125E9E;border-radius:20px;padding:4px 10px;margin:2px;font-size:0.95rem;'>{item}</span>"
-                            for item in usage_items
-                        )
-                        st.markdown(pills_html, unsafe_allow_html=True)
-                    else:
-                        st.caption("*No usage found*")
-                    st.write("")
-
-                    st.checkbox(
-                        "Add to shortlist",
-                        key=f"shortlist_{idx}"
-                    )
-
-        else:
-            st.markdown(
-                """
-                <br>
-                <div style="text-align: center; font-size: 1.2em">
-                    🍂 <span style="color: grey;">No applications matched these filters...</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+with tab2:
 
 
-    #########################################
-    #              INSIGHTS TAB             #
-    #########################################
+    ## =========== DATA OVERVIEW ==========
 
-    with tab2:
+    st.header("General Insights")
+    add_vertical_space(1)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Applications Submitted", len(df))
+    col2.metric("Median N.I", df['necessity_index'].median().round(2))
+    col3.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
+
+    ## --- NI Distribution Plot ---
+    ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50, title='Necessity Index Histogram')
+    st.plotly_chart(ni_distribution_plt)
 
 
-        ## =========== DATA OVERVIEW ==========
+    # =========== TOPIC MODELING ============ 
 
-        st.header("General Insights")
+    try:
+
+        st.header("Topic Modeling")
         add_vertical_space(1)
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Applications Submitted", len(df))
-        col2.metric("Median N.I", df['necessity_index'].median().round(2))
-        col3.metric("Avg. Word Count", f"{df['word_count'].mean().round(1)}")
+        ## ------- 1. Tokenize texts into sentences -------
+        nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
 
-        ## --- NI Distribution Plot ---
-        ni_distribution_plt = plot_histogram(df, col_to_plot='necessity_index', bins=50, title='Necessity Index Histogram')
-        st.plotly_chart(ni_distribution_plt)
+        sentences = []
+        mappings = []
 
-
-        # =========== TOPIC MODELING ============ 
-
-        try:
-
-            st.header("Topic Modeling")
-            add_vertical_space(1)
-
-            ## ------- 1. Tokenize texts into sentences -------
-            nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
-
-            sentences = []
-            mappings = []
-
-            for idx, application_text in df[freeform_col].dropna().items():
-                for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
-                    sentences.append(sentence)
-                    mappings.append(idx)
+        for idx, application_text in df[freeform_col].dropna().items():
+            for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
+                sentences.append(sentence)
+                mappings.append(idx)
 
 
-            ## -------- 2. Generate embeddings -------
+        ## -------- 2. Generate embeddings -------
 
-            embeddings_model = load_embeddings_model()
-            embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
+        embeddings_model = load_embeddings_model()
+        embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
 
-            ## -------- 3. Topic Modeling --------
+        ## -------- 3. Topic Modeling --------
 
-            umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
-            hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+        umap_model = UMAP(n_neighbors=5, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
+        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
 
-            # Run topic modeling from cached resource
-            topic_model, topics, probs = run_topic_modeling()
+        # Run topic modeling from cached resource
+        topic_model, topics, probs = run_topic_modeling()
 
-            topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
+        topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) # converts OpenAI representatino to actual topic labels
 
 
-            ## ------- 4. Display Topics Dataframe ------
+        ## ------- 4. Display Topics Dataframe ------
 
-            topics_df = topic_model.get_topic_info()
-            topics_df = topics_df[topics_df['Topic'] > -1]
-            topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
-            cols_to_move = ['Topic','CustomName']
-            topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
-            topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
+        topics_df = topic_model.get_topic_info()
+        topics_df = topics_df[topics_df['Topic'] > -1]
+        topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
+        cols_to_move = ['Topic','CustomName']
+        topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+        topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
 
-            with st.popover("How are topic extracted?", icon="🌱"):
+        with st.popover("How are topic extracted?", icon="🌱"):
 
-                st.write("""
-                **About Topic Modeling**
+            st.write("""
+            **About Topic Modeling**
 
-                We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
+            We use BERTopic to :primary[**dynamically**] extract the most common topics from the natural language data.
 
-                BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
+            BERTopic is a machine learning technique that allows us to group documents (in this case, sentences within application letters) based on their semantic similarity and other patterns such as word frequency and placement.
 
-                The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
+            The table you see below shows you the extracted topics, alongside their top 10 extracted keywords and a small sample of real texts from the applications that demonstrate where the topics came from.
 
-                **Table Info**
-                - **Topic Nr.:** The 'id' of the topic.
-                - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
-                - **Representation:** Top 10 keywords that best represent a topic
-                - **Representative Docs**: Sample sentences contributing to the topic
-                """)
-            st.dataframe(topics_df, hide_index=True)
+            **Table Info**
+            - **Topic Nr.:** The 'id' of the topic.
+            - **Topic Name:** This is an AI-generated label based on a few samples of application responses alongside their corresponding keywords.
+            - **Representation:** Top 10 keywords that best represent a topic
+            - **Representative Docs**: Sample sentences contributing to the topic
+            """)
+        st.dataframe(topics_df, hide_index=True)
 
-            ## -------- 5. Plot Topics Chart ----------
+        ## -------- 5. Plot Topics Chart ----------
 
-            topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
-            st.plotly_chart(topic_count_plot, use_container_width=True)
+        topic_count_plot = plot_topic_countplot(topics_df, topic_id_col='Topic Nr.', topic_name_col='Topic Name', representation_col='Representation', height=500, title='Topic Frequency Chart')
+        st.plotly_chart(topic_count_plot, use_container_width=True)
 
-            ## --------- 6. User Updates -----------
+        ## --------- 6. User Updates -----------
 
+        if st.session_state.get("topic_toast_shown_for") != st.session_state["current_file_hash"]:
             st.toast(
             """
             **Topic modeling is ready!** View the results on the _Insights_ tab
@@ -412,5 +423,7 @@ if uploaded_file is not None:
             icon='🎉'
             )
 
-        except Exception as e:
-            st.error(f"Topic modeling failed: {str(e)}")
+            st.session_state["topic_toast_shown_for"] = st.session_state["current_file_hash"]
+
+    except Exception as e:
+        st.error(f"Topic modeling failed: {str(e)}")
