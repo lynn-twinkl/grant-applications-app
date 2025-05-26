@@ -1,3 +1,14 @@
+---
+title: Community Collections App
+emoji: 🪷
+colorFrom: "pink"
+colorTo: "orange"
+sdk: "streamlit"
+sdk_version: "1.45.1"
+app_file: app.py
+pinned: false
+---
+
 # Community Collections Shortlisting App
 
 This app was created to help the CC team at Twinkl more easily shorltist potential winners of Monthly Twinkl grants, prizes and giveaways without losing the quality of human touch.
