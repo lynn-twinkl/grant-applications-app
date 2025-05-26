@@ -2,7 +2,7 @@
 title: Community Collections App
 emoji: 🪷
 colorFrom: "pink"
-colorTo: "orange"
+colorTo: "red"
 sdk: "streamlit"
 sdk_version: "1.45.1"
 app_file: app.py
