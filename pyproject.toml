@@ -6,6 +6,7 @@ dependencies = [
     "bertopic",
     "contractions",
     "en-core-web-sm",
+    "hf-xet>=1.1.5",
     "joblib",
     "jupyterlab>=4.4.2",
     "langchain-core",
