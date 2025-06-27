@@ -52,10 +52,13 @@ def main():
     print(df.iloc[:,[0,1,2,-1]].sample(8).to_markdown(tablefmt='grid'))
     print()
     print(f"📚 TOTAL BOOK CANDIDATES = {len(df[df['book_candidates']])}")
-    sample = df[df['book_candidates']].sample(1)
 
-    print('\n' + "📄 SAMPLE CANDIDATE" + '\n')
-    print(f"(ID: {sample['App ID'].item()}) {sample['Application Info'].item()}")
+    samples = df[df['book_candidates']].sample(3)
+
+    print('\n' + "📄 SAMPLE CANDIDATES" + '\n')
+    for idx, row in samples.iterrows():
+        print(f"(ID: {row['App ID']}) {row['Application Info']}")
+        print()
 
 
 if __name__ == "__main__":
