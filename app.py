@@ -59,6 +59,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
     id_col = detect_id_col(df_orig)
+    school_type_col = detect_school_type_col(df_orig)
     print(id_col)
 
     df_orig = df_orig[df_orig[freeform_col].notna()]
@@ -72,7 +73,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     scored['priority'] = qcut_labels(scored['necessity_index'])
 
     # Find Twinkl Originals Candidates
-    scored['book_candidates'] = find_book_candidates(scored, freeform_col)
+    scored['book_candidates'] = find_book_candidates(scored, freeform_col, school_type_col)
 
     # Label Heartfelt Applications
     scored['clean_text'] = scored[freeform_col].map(normalise_text)
