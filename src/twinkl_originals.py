@@ -1,20 +1,70 @@
 import re
 import pandas as pd
+from tabulate import tabulate
 
-def find_book_candidates(df: pd.DataFrame, column: str) -> pd.Series:
+def find_book_candidates(df: pd.DataFrame, freeform_column: str, school_type_column: str) -> pd.Series:
 
-    if column not in df.columns:
-        raise KeyError(f"Column '{column}' not found in DataFrame")
+    if freeform_column not in df.columns:
+        raise KeyError(f"Column '{freeform_column}' not found in DataFrame.")
+    if school_type_column not in df.columns:
+        raise KeyError(f"Column '{school_type_column}' not found in DataFrame.")
 
-    series = df[column].astype(str)
+    # ---------- 1. CHECK INTENT TO ACQUIRE BOOKS -----------
 
-    pattern_books = r'\bbooks?\b'
-    pattern_level = r'\b(ks1|ks2|primary|eyfs|early years|nursery)\b'
+    freeform_text_series = df[freeform_column].astype(str)
 
-    has_books = series.str.contains(pattern_books, case=False, na=False)
-    is_primary = series.str.contains(pattern_level, case=False, na=False)
+    pattern_intent_to_buy = re.compile(r"""
+        \b(want|need|request|require|looking\sfor|look\sfor|purchase|buy|seeking|ordering|order|fund|funding)\b # The "intent" words
+        (?:                                     # Non-capturing group for words in between
+            \s+                                 # One or more spaces
+            \w+                                 # One or more word characters
+        ){0,5}                                  # Allow 0 to 5 words in between
+        \s+                                     # At least one space before the item
+        \b(books?|readers?|texts?|reading\smaterial|sets\sof\sbooks)\b   # The "item" words
+    """, re.VERBOSE | re.IGNORECASE)
 
+    wants_books = freeform_text_series.str.contains(pattern_intent_to_buy, na=False)
+
+    # ----------- 2. CHECK SCHOOL TYPES --------
+    allowed_school_types = [
+        'Primary',
+        'Nursery',
+        'SEND',
+        'Special Primary',
+        'Childminder',
+        'All-Through',
+        'Independent Primary'
+    ]
+
+    is_allowed_school_type = df[school_type_column].astype(str).isin(allowed_school_types)
+
+    return wants_books & is_allowed_school_type
+
+
+# ========== USAGE EXAMPLE ==========
+
+def main():
     
-    return has_books & is_primary
+    df = pd.read_csv('data/raw/new-application-format-data.csv')
+
+    print("Original DataFrame:")
+    print(df)
+    print("\n" + "="*30 + "\n")
+
+    df['book_candidates'] = find_book_candidates(df, 'Application Info', 'School Type')
+
+    print("DataFrame with 'book_candidates' column:")
+    
+    print(df.iloc[:,[0,1,2,-1]].head().to_markdown(tablefmt='grid'))
+    print("\n" + "="*30 + "\n")
+
+    print(f"Book Candidates: {len(df[df['book_candidates']])}")
+    sample = df[df['book_candidates']].sample(1)
+
+    print("📄 SAMPLE")
+    print("ID:", sample['App ID'].item())
+    print(sample['Application Info'].item())
 
 
+if __name__ == "__main__":
+    main()
