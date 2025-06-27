@@ -124,49 +124,42 @@ def detect_id_col(df: pd.DataFrame) -> str | None:
     return candidates[0]
 
 
-# ============== CAREER COLUMN =============
+# ============== SCHOOL TYPE COLUMN =============
 
-def detect_career_col(
+def detect_school_type_col(
     df: pd.DataFrame,
     *,
-    uniqueness_weight: float = 0.5,
-    length_weight: float = 0.3,
-    punct_weight: float = 0.2,
+    uniqueness_weight: float = 0.3,
+    content_match_weight: float = 0.4, # <-- New weight for content
+    length_weight: float = 0.2,
+    punct_weight: float = 0.1,
     name_boosts: dict[str, float] | None = None,
+    value_keywords: set[str] | None = None, # <-- New parameter for keywords
     min_score: float = 0.40,
     high_uniqueness_penalty: float = 0.95,
     return_scores: bool = False,
 ) -> str | None | Tuple[str | None, Dict[str, float]]:
     """
-    Analyzes a DataFrame to find the column that most likely represents a 'career' or 'role'.
+    Analyzes a DataFrame to find the column that most likely represents a 'school type'.
 
-    The function operates on heuristics based on common characteristics of a career column:
-    1.  **Low Uniqueness**: Values are often repeated (e.g., 'teacher', 'ks1').
-    2.  **Short Text**: Entries are typically brief.
-    3.  **Minimal Punctuation**: Values are clean strings, not sentences.
-    4.  **Header Keywords**: The column name itself is a strong indicator (e.g., 'Career', 'Job').
-
-    Args:
-        df: The DataFrame to analyze.
-        uniqueness_weight: The importance of having low uniqueness (many repeated values).
-        length_weight: The importance of having short text values.
-        punct_weight: The importance of having little to no punctuation.
-        name_boosts: Multiplicative factors for keyword matches in the column header.
-                     Defaults to boosts for 'career', 'job', 'role', and 'position'.
-        min_score: The minimum score for a column to be considered a match.
-        high_uniqueness_penalty: A uniqueness ratio (e.g., 0.95) above which a column's
-                                 score is heavily penalized, as it is unlikely to be
-                                 a categorical role column.
-        return_scores: If True, returns a tuple containing the best column name and a
-                       dictionary of scores for all candidate columns.
-
-    Returns:
-        The name of the detected career column, or None if no suitable column is found.
-        If return_scores is True, it returns a tuple of (column_name, scores_dict).
+    The function operates on heuristics based on common characteristics of a school-type col:
+    1.  **Content Match**: A significant portion of values match known school types (the strongest signal).
+    2.  **Low Uniqueness**: Values are often repeated (e.g., 'Primary', 'All-through').
+    3.  **Short Text**: Entries are typically brief.
+    4.  **Minimal Punctuation**: Values are clean strings, not sentences.
+    5.  **Header Keywords**: The column name itself is a strong indicator (e.g., 'School Type').
     """
-
+    # More robust default name boosts
     if name_boosts is None:
-        name_boosts = {'career': 3.0, 'job': 2.5, 'role': 2.5, 'position': 2.0}
+        name_boosts = {'school': 3.0, 'type': 2.0}
+
+    # Default set of keywords to search for within the column's values
+    if value_keywords is None:
+        value_keywords = {
+            'nursery', 'primary', 'secondary', 'infant', 'junior',
+            'college', 'academy', 'independent', 'special', 'pru',
+            'all-through', 'middle', 'state', 'educator', 'home'
+        }
 
     obj_cols = df.select_dtypes(include=["object"]).columns
     if not obj_cols.size:
@@ -175,20 +168,33 @@ def detect_career_col(
     # Pre-compute raw metrics for each object column
     raw_metrics: Dict[str, dict[str, float]] = {}
     for col in obj_cols:
-        # Drop temporary NA's to not skew metrics, then convert to string
         ser = df[col].dropna().astype(str)
         if ser.empty:
             continue
+
+        # --- New Content Match Calculation ---
+        unique_values = ser.unique()
+        content_match_score = 0.0
+        if len(unique_values) > 0:
+            match_count = 0
+            for val in unique_values:
+                # Check if any keyword is a substring of the lowercase value
+                if any(keyword in val.lower() for keyword in value_keywords):
+                    match_count += 1
+            content_match_score = match_count / len(unique_values)
+        # --- End of New Calculation ---
+
         raw_metrics[col] = {
             "avg_len": ser.str.len().mean(),
             "avg_punct": ser.apply(lambda s: sum(c in string.punctuation for c in s)).mean(),
             "unique_ratio": ser.nunique() / len(ser) if len(ser) > 0 else 0.0,
+            "content_match": content_match_score # Store the new score
         }
 
     if not raw_metrics:
         return (None, {}) if return_scores else None
 
-    # Get max values for normalization across all columns
+    # Get max values for normalization
     max_len = _max_or_eps([m["avg_len"] for m in raw_metrics.values()])
     max_punc = _max_or_eps([m["avg_punct"] for m in raw_metrics.values()])
 
@@ -199,10 +205,12 @@ def detect_career_col(
         punc_score = 1 - _normalise(metrics["avg_punct"], max_punc)
         uniq_score = 1 - metrics["unique_ratio"]
 
+        # --- Updated Final Scoring Formula ---
         score = (
-            length_weight * len_score
-            + punct_weight * punc_score
+            content_match_weight * metrics["content_match"] # Use the new score directly
             + uniqueness_weight * uniq_score
+            + length_weight * len_score
+            + punct_weight * punc_score
         )
 
         # Apply boosts for matching header keywords
@@ -225,7 +233,6 @@ def detect_career_col(
     if return_scores:
         return (best_col if passed else None, scores)
     return best_col if passed else None
-
 # =========== USAGE ============
 
 def main():
@@ -237,15 +244,24 @@ def main():
 
     id_col = detect_id_col(df)
     freeform_col, freeform_scores = detect_freeform_col(df, return_scores=True)
-    career_col, career_scores = detect_career_col(df, return_scores=True)
+    school_type_col, school_type_scores = detect_school_type_col(df, return_scores=True)
 
     print(f"\nDetected ID Column: '{id_col}'")
     print(f"Detected Free-Form Column: '{freeform_col}'")
-    print(f"Detected Career Column: '{career_col}'")
+    print(f"Detected School Type Column: '{school_type_col}'")
+    print()
+    print("\n--- Free-form Column Scores (Higher is better) ---")
+    if freeform_scores:
+        sorted_scores = sorted(freeform_scores.items(), key=lambda item: item[1], reverse=True)
+        for col, score in sorted_scores:
+            print(f"  - {col:<25}: {score:.4f}")
+    else:
+        print("No object columns found to score for freeform col...")
 
-    print("\n--- Career Column Scores (Higher is better) ---")
-    if career_scores:
-        sorted_scores = sorted(career_scores.items(), key=lambda item: item[1], reverse=True)
+
+    print("\n--- School Type Column Scores (Higher is better) ---")
+    if school_type_scores:
+        sorted_scores = sorted(school_type_scores.items(), key=lambda item: item[1], reverse=True)
         for col, score in sorted_scores:
             print(f"  - {col:<25}: {score:.4f}")
     else:
