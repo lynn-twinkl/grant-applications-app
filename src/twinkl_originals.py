@@ -47,23 +47,15 @@ def main():
     
     df = pd.read_csv('data/raw/new-application-format-data.csv')
 
-    print("Original DataFrame:")
-    print(df)
-    print("\n" + "="*30 + "\n")
-
     df['book_candidates'] = find_book_candidates(df, 'Application Info', 'School Type')
 
-    print("DataFrame with 'book_candidates' column:")
-    
-    print(df.iloc[:,[0,1,2,-1]].head().to_markdown(tablefmt='grid'))
-    print("\n" + "="*30 + "\n")
-
-    print(f"Book Candidates: {len(df[df['book_candidates']])}")
+    print(df.iloc[:,[0,1,2,-1]].sample(8).to_markdown(tablefmt='grid'))
+    print()
+    print(f"📚 TOTAL BOOK CANDIDATES = {len(df[df['book_candidates']])}")
     sample = df[df['book_candidates']].sample(1)
 
-    print("📄 SAMPLE")
-    print("ID:", sample['App ID'].item())
-    print(sample['Application Info'].item())
+    print('\n' + "📄 SAMPLE CANDIDATE" + '\n')
+    print(f"(ID: {sample['App ID'].item()}) {sample['Application Info'].item()}")
 
 
 if __name__ == "__main__":
