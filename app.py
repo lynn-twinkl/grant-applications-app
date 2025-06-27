@@ -19,7 +19,7 @@ from streamlit_extras.add_vertical_space import add_vertical_space
 
 from src.extract_usage import extract_usage
 from src.necessity_index import compute_necessity, index_scaler, qcut_labels
-from src.column_detection import detect_freeform_col, detect_id_col
+from src.column_detection import detect_freeform_col, detect_id_col, detect_school_type_col
 from src.shortlist import shortlist_applications
 from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
