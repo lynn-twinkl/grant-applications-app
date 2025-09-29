@@ -15,6 +15,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from bertopic import BERTopic
 from bertopic.representation import KeyBERTInspired, OpenAI
 
+from src.prompts import PROMPTS
+
 
 import os
 from dotenv import load_dotenv
@@ -88,9 +90,7 @@ stopwords = list(nlp.Defaults.stop_words)
 custom_stopwords = [
     'thank you', 'thankyou', 'thanks', 'thank'
     'children', 'child', 'students',
-    'twinkl',
-    'funding'
-
+    'twinkl', 'funding'
 ]
 
 stopwords.extend(custom_stopwords)
@@ -100,22 +100,14 @@ stopwords.extend(custom_stopwords)
 
 def create_openai_model():
             client = openai.OpenAI(api_key=OPENAI_API_KEY)
-            prompt = """
-            This topic contains the following documents:
-            [DOCUMENTS]
-
-            The topic is described by the following keywords: [KEYWORDS]
-
-            Based on the information above, extract a short yet descriptive topic label.
-            """
             
             openai_model = OpenAI(
                     client,
-                    model="gpt-4.1-nano",
+                    model="gpt-4o",
                     exponential_backoff=True,
-                    chat=True, prompt=prompt,
-                    system_prompt= """ **Task**: As a topic modeling expert, your responsibility is to generate concise yet comprehensive topic labels from rows in a BertTopic `topic_info` dataframe. These topics have been derived from grant application forms submitted by schools, tutors, or other institutions participating in Twinkl giveaways.\n\n**Objective**: Your goal is to create labels for the extracted topics that accurately and clearly describe each topic within the specified context. These labels should be easily interpretable by the members of the Community Collections team.\n\n**Instructions**: \n\n1. **Understand the Context**: The topics relate to grant applications and are relevant to educational institutions participating in Twinkl giveaways.\n\n2. **Generate Labels**:\n- Create labels that are short yet capture the essence of each topic.\n- Ensure that the labels are contextually appropriate and provide clarity.\n- Focus on making the labels easily understandable for the Community Collections team. \n\n3. **Considerations**:\n- Each label should succinctly convey the main idea of the topic.\n- Avoid overly technical language unless necessary for precision.\n- Ensure the labels align with the overall educational and grant-related context."""
-            )
+                    chat=True,
+                    prompt = PROMPTS['topic_modeling_human'],
+                    system_prompt = PROMPTS['topic_modeling_system'])
             return openai_model
 
 ## ---------- AI LABELS TO TOPIC NAME ----------
@@ -151,7 +143,7 @@ def bertopic_model(docs, embeddings, _embedding_model, _umap_model, _hdbscan_mod
         vectorizer_model=vectorizer_model,
         hdbscan_model=_hdbscan_model,
         embedding_model=_embedding_model,
-        nr_topics='auto'
+        nr_topics=10
     )
     
     topics, probs = topic_model.fit_transform(docs, embeddings)
