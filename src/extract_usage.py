@@ -8,7 +8,7 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def extract_usage(docs, max_concurrency: int = 100) -> List[List[str]]:
+def extract_usage(docs, max_concurrency: int = 110) -> List[List[str]]:
     logging.info(f"Starting extract_usage function with {len(docs)} documents and max_concurrency={max_concurrency}")
 
     llm = ChatOpenAI(
