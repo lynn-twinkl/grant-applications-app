@@ -1,10 +1,10 @@
 # src/pr_opss.py
 
 import json
+import pandas as pd
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
-from pandas import DataFrame
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,8 +12,8 @@ from src.prompts import PROMPTS
 
 # ================= HELPERS ===============
 
-def format_text(
-        shortlisted_apps: DataFrame,
+def format_application_texts(
+        shortlisted_apps: pd.DataFrame,
         freeform_col: str,
         id_col: str
         ) -> Dict[str, Any]:
@@ -28,16 +28,16 @@ def format_text(
 
 
     records = (
-    shortlisted_apps[[id_col, freeform_col, 'Postcode']]
+    shortlisted_apps[[id_col, freeform_col, 'postcode']]
     .sample(10)
-    .rename(columns={id_col: "id", freeform_col: "text", 'Postcode': 'postcode'})
+    .rename(columns={id_col: "id", freeform_col: "text"})
     .to_dict(orient="records")
     )
 
     return json.dumps(records, indent=2, ensure_ascii=False)
 
 
-def classify_apps(applications_text: str):
+def call_llm(applications_text: str):
     """
     Queries LLM with structured output
     """
@@ -56,46 +56,67 @@ def classify_apps(applications_text: str):
     client = OpenAI()
 
     response = client.responses.parse(
-        model="gpt-4o",
+        model="gpt-5-mini",
         input=[
             {"role": "system", "content": PROMPTS['pr_classification_system']},
-            {
-                "role": "user",
-                "content": applications_text,
-            },
+            {"role": "user", "content": applications_text},
         ],
         text_format=ClassifiedList,
     )
 
-
-
     return response.output_parsed
 
 
+# ============ PUBLIC ENTRYPOINT ==============
+
+def classify_applications(shortlisted_apps: pd.DataFrame):
+
+    logging.info("Starting PR opportunity analysis for {len(shortlisted_apps)} candidates")
+
+    try:
+        application_texts = format_application_texts(shortlisted_apps)
+
+    except Exception as e:
+        logging.error(f"Error formatting applications texts for PR opportunity extraction: {str(e)}")
+        raise
+
+    try:
+        response = call_llm(application_texts)
+        classified_app_obj = response.applications # Extract list of ClassifiedApplication objs
+
+        logging.info("Successfuly classified {len(classified_apps_obj)} candidates")
+        return classified_apps_obj
+
+    except Exception as e:
+        logging(f"Error with LLM classification for PR opportunity analysis: {str(e)}")
+        raise
+
+        
 # =================== USAGE =================
 
-import pandas as pd
 from src.column_detection import detect_freeform_col, detect_id_col, detect_school_type_col
 
 def main():
 
-    df = pd.read_csv('./data/raw/april-data.csv')
+    df = pd.read_csv('./data/raw/old_application_format/april-data.csv')
+
+    df.columns = df.columns.str.lower().str.replace(' ', '_')
 
     freeform_col = detect_freeform_col(df)
     id_col = detect_id_col(df)
 
-    json_str = format_text(df, freeform_col, id_col)
+    application_texts = format_application_texts(df, freeform_col, id_col)
 
     print("📄 RAW JSON STRING")
-    print(json_str)
+    print(application_texts)
     print()
 
-    response = classify_apps(json_str)
-    classified_apps_obj = response.applications # Extract list of ClassifiedApplication objs
-
+    response = call_llm(application_texts)
+    classified_apps_obj = response.applications 
     print("AGENT RESPONSE \n")
     print(response.model_dump_json(indent=2))
     print(type(classified_apps_obj))
+    print(len(classified_apps_obj))
 
 
 if __name__ == '__main__':
