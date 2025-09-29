@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import hashlib
 import joblib
+import traceback
 from io import BytesIO
 from umap import UMAP
 from hdbscan import HDBSCAN
@@ -55,6 +56,9 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     """
     # Read Uploaded Data 
     df_orig = pd.read_csv(BytesIO(raw_csv))
+    df_orig.columns = df_orig.columns.str.lower().str.replace(' ', '_')
+
+    print(df_orig.columns)
 
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
@@ -101,35 +105,51 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     return shortlist_applications(df, k=len(df))
 
 @st.cache_resource(show_spinner=True)
-def run_topic_modeling():
-
+def run_topic_modeling(_df: pd.DataFrame, freeform_col: str, _file_hash: str):
     try:
-
         # ------- 1. Tokenize texts into sentences -------
         nlp = topic_modeling_pipeline.load_spacy_model(model_name='en_core_web_sm')
 
         sentences = []
         mappings = []
 
-        for idx, application_text in df[freeform_col].dropna().items():
+        for idx, application_text in _df[freeform_col].dropna().items():
             for sentence in topic_modeling_pipeline.spacy_sent_tokenize(application_text):
                 sentences.append(sentence)
                 mappings.append(idx)
 
+        # ✅ Check if we have enough data
+        if len(sentences) < 20:
+            st.warning(f"⚠️ Only {len(sentences)} sentences found. Topic modeling requires at least 20 sentences for meaningful results.")
+            return None, None, None, None
 
         # -------- 2. Generate embeddings -------
-
         embeddings_model = load_embeddings_model()
         embeddings = embeddings_model.encode(sentences, show_progress_bar=True)
 
-        # -------- 3. Topic Modeling --------
-
-        umap_model = UMAP(n_neighbors=7, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
-        hdbscan_model = HDBSCAN(min_cluster_size=10, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+        # -------- 3. Dynamic Topic Modeling Parameters --------
+        # Adjust min_cluster_size based on data size
+        min_cluster_size = max(5, min(10, len(sentences) // 10))
+        
+        umap_model = UMAP(
+            n_neighbors=min(7, len(sentences) - 1),  # Can't be larger than n_samples - 1
+            n_components=5, 
+            min_dist=0.0, 
+            metric='cosine', 
+            random_state=42
+        )
+        
+        hdbscan_model = HDBSCAN(
+            min_cluster_size=min_cluster_size,
+            metric='euclidean', 
+            cluster_selection_method='eom', 
+            prediction_data=True
+        )
 
         # --------- 4. Perform Topic Modeling ---------
-
-        topic_model, topics, probs = topic_modeling_pipeline.bertopic_model(sentences, embeddings, embeddings_model, umap_model, hdbscan_model)
+        topic_model, topics, probs = topic_modeling_pipeline.bertopic_model(
+            sentences, embeddings, embeddings_model, umap_model, hdbscan_model
+        )
 
         topic_modeling_pipeline.ai_labels_to_custom_name(topic_model) 
 
@@ -137,10 +157,8 @@ def run_topic_modeling():
 
     except Exception as e:
         st.error(f"Topic modeling failed: {e}")
-        st.code(traceback.format_exc())  # Shows the full error in a nice code box
+        st.code(traceback.format_exc())
         return None, None, None, None
-
-
 
 ################################
 # MAIN APP SCRIPT
@@ -169,26 +187,27 @@ if raw is None:
 ## ====== DATA PROCESSING ======
 
 df, freeform_col, id_col = load_and_process(raw) # from cached function
-topic_model, topics, probs, mappings = run_topic_modeling() # from cached function
+file_hash = st.session_state["current_file_hash"]
+topic_model, topics, probs, mappings = run_topic_modeling(df, freeform_col, file_hash)
 
-if topic_model is not None:
-    label_map = (topic_model
-                 .get_topic_info()
-                 .set_index("Topic")["CustomName"]
-                 .to_dict())
-    df = topic_modeling_pipeline.attach_topics(df, mappings, topics, label_map, col="topics")
-else:
-    st.warning("Topics could not be generated; continuing without them.")
+if topic_model is None:
+    st.error("⚠️  Topic modeling failed. Please check the error message above and try again.")
+    st.stop()
 
+label_map = (topic_model
+             .get_topic_info()
+             .set_index("Topic")["CustomName"]
+             .to_dict())
+df = topic_modeling_pipeline.attach_topics(df, mappings, topics, label_map, col="topics")
 
-topics_df = topic_model.get_topic_info()
-topics_df = topics_df[topics_df['Topic'] > -1]
-topics_df.drop(columns=['Name', 'OpenAI'], inplace=True)
-cols_to_move = ['Topic','CustomName']
+topics_df = (topic_model.get_topic_info()
+             .query('Topic > -1')
+             .drop(columns = ['Name', 'OpenAI'])
+             .rename(columns = {'CustomName':'Topic Name', 'Topic':'Topic Nr.'})
+             )
+
+cols_to_move = ['Topic Nr.', 'Topic Name']
 topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
-topics_df.rename(columns={'CustomName':'Topic Name', 'Topic':'Topic Nr.'}, inplace=True)
-
-
 
 book_candidates_df = df[df['book_candidates'] == True]
 
@@ -355,20 +374,30 @@ with tab1:
     st.write("")
     if len(filtered_df) > 0:
         st.markdown("#### Filtered Applications")
-        for idx, row in filtered_df.iterrows():
-            with st.expander(f"Application {int(row[id_col])}"):
+
+        filtered_df['clean_usage'] = filtered_df['usage'].apply(
+                lambda x: [item for item in x if item and item.lower() != 'none']
+                )
+
+        filtered_df['clean_topics'] = filtered_df['topics'].apply(
+                lambda x: [item for item in x if item and item.lower() != 'none']
+                )
+
+        for row in filtered_df.itertuples():
+            with st.expander(f"Application {int(getattr(row, id_col))}"):
                 st.write("")
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Necessity", f"{row['necessity_index']:.1f}")
-                col2.metric("Urgency", f"{int(row['urgency_score'])}")
-                col3.metric("Severity", f"{int(row['severity_score'])}")
-                col4.metric("Vulnerability", f"{int(row['vulnerability_score'])}")
+                col1.metric("Necessity", f"{row.necessity_index:.1f}")
+                col2.metric("Urgency", f"{int(row.urgency_score)}")
+                col3.metric("Severity", f"{int(row.severity_score)}")
+                col4.metric("Vulnerability", f"{int(row.vulnerability_score)}")
 
                 st.markdown("##### Excerpt")
-                st.write(row[freeform_col])
+                st.write(getattr(row, freeform_col))
+
 
                 # HTML for clean usage items 
-                usage_items = [item for item in row['usage'] if item and item.lower() != 'none']
+                usage_items = row.clean_usage
                 if usage_items:
                     st.markdown("##### Usage")
                     pills_html = "".join(
@@ -379,7 +408,7 @@ with tab1:
                 else:
                     st.caption("*No usage found*")
 
-                topic_items = [item for item in row['topics'] if item and item.lower() != 'none']
+                topic_items = row.clean_topics
                 if topic_items:
                     st.markdown("##### Topics")
                     topic_boxes_html= "".join(
@@ -393,7 +422,7 @@ with tab1:
 
                 st.checkbox(
                     "Add to shortlist",
-                    key=f"shortlist_{idx}"
+                    key=f"shortlist_{row.Index}"
                 )
 
     else:
