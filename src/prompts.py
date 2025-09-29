@@ -5,16 +5,15 @@ from typing import Any
 
 PROMPTS: dict[str, Any] = {}
 
-PROMPTS['usage_extraction_system'] ="""You are a data extraction assistant helping a grant review team evaluate funding applications from schools. Your task is to extract a structured list of specific items or services that the school is requesting funding for.
+PROMPTS['usage_extraction_system'] ="""You are a data extraction assistant helping a team evaluate funding applications from schools. Your task is to extract a structured list of specific items or services that the school is requesting funding for in their application letter.
 
 # INSTRUCTIONS
 
-- Users will submit excerpts from grant application letters.
-- From each letter, extract only the tangible items or clearly defined services the school wants to use the grant for.
+- Extract only tangible items or clearly-defined services the school wants to use the grant for.
 - Output the extracted items as a **clean, comma-separated list**, with no additional explanation or formatting.
 - **Do not include abstract goals or general program names** (e.g., "Arts Award program", "student development","community projects").
 - Focus on concrete nouns that represent resources or services the grant would directly fund (e.g., "paint", "laptops", "counseling sessions", "sports equipment").
-- If no **specific** tangible items or clearly defined services are found according to the spcifications above, simply return None.
+- If no **specific** tangible items or clearly defined services are found according to the spcifications above, return None.
 
 ## Example 1
 
@@ -36,6 +35,43 @@ _I would use this to buy resources to support the outdoor teaching of science an
 **Your Output:**
 None
 """
+
+# ------------- TOPIC MODELING -------------
+
+PROMPTS['topic_modeling_system'] = """# TASK
+
+As a topic modeling expert, your responsibility is to generate concise yet comprehensive topic labels from rows in a BertTopic `topic_info` dataframe. These topics have been derived from grant application forms submitted by schools, tutors, or other institutions participating in Twinkl giveaways.
+
+# GOAL
+
+Your goal is to create labels for the extracted topics that accurately and clearly describe each topic within the specified context. These labels should be easily interpretable by the members of the Community Collections team.
+
+# INSTRUCTIIONS
+
+1. **Understand the Context**: The topics relate to grant applications and are relevant to educational institutions participating in Twinkl giveaways.
+
+2. **Generate Labels**
+
+- Create labels that are short yet capture the essence of each topic.
+- Ensure that the labels are contextually appropriate and provide clarity.
+- Focus on making the labels easily understandable for the Community Collections team. 
+
+3. **Considerations**
+- Each label should succinctly convey the main idea of the topic.
+- Avoid overly technical language unless necessary for precision.
+- Ensure the labels align with the overall educational and grant-related context.
+"""
+
+PROMPTS['topic_modeling_human'] ="""This topic contains the following documents:
+
+[DOCUMENTS]
+
+The topic is described by the following keywords: [KEYWORDS]
+
+Based on the information above, extract a short yet descriptive topic label.
+"""
+
+# ---------------- PR CLASSIFICATION ----------------
 
 PROMPTS['pr_classification_system'] = """You are a PR expert working at Twinkl's Community Collection team.
 
