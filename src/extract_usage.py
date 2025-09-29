@@ -1,3 +1,4 @@
+import logging
 from src.prompts import PROMPTS
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -5,11 +6,14 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-def extract_usage(docs, max_concurrency: int = 20) -> List[List[str]]:
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def extract_usage(docs, max_concurrency: int = 100) -> List[List[str]]:
+    logging.info(f"Starting extract_usage function with {len(docs)} documents and max_concurrency={max_concurrency}")
 
     llm = ChatOpenAI(
-        model='gpt-4.1-mini',
-        temperature=0.2
+        model='gpt-5-nano',
+        temperature=1 # Only 1 supported by gpt 5
     )
 
     prompt = ChatPromptTemplate.from_messages([
