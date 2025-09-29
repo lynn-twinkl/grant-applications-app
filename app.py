@@ -104,6 +104,52 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     """Pre‑compute shortlist_score for all rows (used for both modes)."""
     return shortlist_applications(df, k=len(df))
 
+@st.cache_data
+def apply_filters(df: pd.DataFrame, auto_short_df: pd.DataFrame, 
+                  selected_view: str, filter_range: tuple, selected_topics: list) -> pd.DataFrame:
+    """
+    Cache filtering operations to avoid recomputing on every interaction.
+    """
+    # Define filter functions
+    def filter_all_applications():
+        return df[df['necessity_index'].between(filter_range[0], filter_range[1])]
+
+    def filter_not_shortlisted():
+        return df[
+            (~df.index.isin(auto_short_df.index)) &
+            (df['necessity_index'].between(filter_range[0], filter_range[1]))
+        ]
+
+    filter_map = {
+        'All applications': filter_all_applications,
+        'Not shortlisted': filter_not_shortlisted,
+    }
+
+    filtered_df = filter_map[selected_view]()
+    
+    # Apply topic filtering if topics are selected
+    if selected_topics:
+        selected_set = set(selected_topics)
+        filtered_df = filtered_df[
+            filtered_df['topics'].apply(lambda topic_list: selected_set.issubset(set(topic_list)))
+        ]
+    
+    return filtered_df
+
+@st.cache_data
+def prepare_display_data(filtered_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pre-process display data once to avoid repeated computations.
+    """
+    display_df = filtered_df.copy()
+    display_df['clean_usage'] = display_df['usage'].apply(
+        lambda x: [item for item in x if item and item.lower() != 'none']
+    )
+    display_df['clean_topics'] = display_df['topics'].apply(
+        lambda x: [item for item in x if item and item.lower() != 'none']
+    )
+    return display_df
+
 @st.cache_resource(show_spinner=True)
 def run_topic_modeling(_df: pd.DataFrame, freeform_col: str, _file_hash: str):
     try:
@@ -133,7 +179,7 @@ def run_topic_modeling(_df: pd.DataFrame, freeform_col: str, _file_hash: str):
         
         umap_model = UMAP(
             n_neighbors=min(7, len(sentences) - 1),  # Can't be larger than n_samples - 1
-            n_components=5, 
+            n_components=3, 
             min_dist=0.0, 
             metric='cosine', 
             random_state=42
@@ -243,33 +289,14 @@ with st.sidebar:
     filter_range = st.slider(
         "Necessity Index Range", min_value=min_idx, max_value=max_idx, value=(min_idx, max_idx)
     )
-    
-    def filter_all_applications(df, auto_short_df, filter_range):
-        return df[df['necessity_index'].between(filter_range[0], filter_range[1])]
-
-    def filter_not_shortlisted(df, auto_short_df, filter_range):
-        return df[
-            (~df.index.isin(auto_short_df.index)) &
-            (df['necessity_index'].between(filter_range[0], filter_range[1]))
-        ]
-
-    filter_map = {
-            'All applications': filter_all_applications,
-            'Not shortlisted': filter_not_shortlisted,
-            }
-
-    filtered_df = filter_map[selected_view](df, auto_short_df, filter_range)
 
     ## -------- Topic Filtering -------
 
     topic_options = sorted(topics_df['Topic Name'].unique())
     selected_topics = st.multiselect("Filter by Topic(s)", options=topic_options, default=[])
 
-    if selected_topics:
-        selected_set = set(selected_topics)
-        filtered_df = filtered_df[
-            filtered_df['topics'].apply(lambda topic_list: selected_set.issubset(set(topic_list)))
-        ]
+    # Use cached filtering function
+    filtered_df = apply_filters(df, auto_short_df, selected_view, filter_range, selected_topics)
 
     st.markdown(f"**Total Applications:** {len(df)}")
     st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
@@ -300,7 +327,7 @@ with st.sidebar:
 
 
 ## ====== CREATE TAB SECTIONS =======
-tab1, tab2 = st.tabs(["Shortlist Manager","Insights"])
+tab1, tab2, tab3 = st.tabs(["Shortlist Manager","Insights", "PR Opportunities"])
 
 
 ##################################################
@@ -375,15 +402,27 @@ with tab1:
     if len(filtered_df) > 0:
         st.markdown("#### Filtered Applications")
 
-        filtered_df['clean_usage'] = filtered_df['usage'].apply(
-                lambda x: [item for item in x if item and item.lower() != 'none']
-                )
+        # Pre-process display data using cached function
+        display_df = prepare_display_data(filtered_df)
 
-        filtered_df['clean_topics'] = filtered_df['topics'].apply(
-                lambda x: [item for item in x if item and item.lower() != 'none']
-                )
+        # ========== PAGINATION IMPLEMENTATION ==========
+        items_per_page = 10
+        total_items = len(display_df)
+        total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
 
-        for row in filtered_df.itertuples():
+        # Initialize page number in session state if not present
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = 1
+
+        # Calculate start and end indices for current page
+        start_idx = (st.session_state.current_page - 1) * items_per_page
+        end_idx = min(start_idx + items_per_page, total_items)
+
+        st.write("")
+        st.caption(f"Showing {start_idx + 1}-{end_idx} of {total_items} applications")
+
+        # Display only items for current page
+        for row in display_df.iloc[start_idx:end_idx].itertuples():
             with st.expander(f"Application {int(getattr(row, id_col))}"):
                 st.write("")
                 col1, col2, col3, col4 = st.columns(4)
@@ -424,6 +463,26 @@ with tab1:
                     "Add to shortlist",
                     key=f"shortlist_{row.Index}"
                 )
+
+        # PAGINATION CONTROLS
+
+        st.write("")
+
+        col_left, col_center, col_right = st.columns([2, 1, 2])
+        
+        with col_left:
+            if st.button("⬅️  Previous", disabled=(st.session_state.current_page == 1), use_container_width=True):
+                st.session_state.current_page -= 1
+                st.rerun()
+        
+        with col_center:
+            st.markdown(f"<div style='text-align: center'>Page {st.session_state.current_page} of {total_pages}</div>", 
+                       unsafe_allow_html=True)
+        
+        with col_right:
+            if st.button("Next ➡️", disabled=(st.session_state.current_page == total_pages), use_container_width=True):
+                st.session_state.current_page += 1
+                st.rerun()
 
     else:
         st.markdown(
@@ -501,3 +560,10 @@ with tab2:
         )
 
         st.session_state["topic_toast_shown_for"] = st.session_state["current_file_hash"]
+
+
+#################################
+#   PR OPPORTUNITIES TAB
+#################################
+
+
