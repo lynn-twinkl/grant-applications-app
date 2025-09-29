@@ -272,7 +272,7 @@ with st.sidebar:
 
     add_vertical_space(4)
     st.divider()
-    st.badge("Version 1.0.0", icon=':material/category:',color='violet')
+    st.badge("Version 1.3.0", icon=':material/category:',color='violet')
     st.markdown("""
     :grey[Made with 🩷  by the AI Innovation Team
     Contact: lynn.perez@twinkl.com]
