@@ -4,14 +4,12 @@
 
 import streamlit as st
 import pandas as pd
+from typing import Tuple
 import hashlib
 import joblib
-import traceback
 from io import BytesIO
 from umap import UMAP
 from hdbscan import HDBSCAN
-
-import os
 
 from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.add_vertical_space import add_vertical_space
@@ -26,7 +24,10 @@ from src.twinkl_originals import find_book_candidates
 from src.preprocess_text import normalise_text 
 import src.models.topic_modeling_pipeline as topic_modeling_pipeline
 from src.px_charts import plot_histogram, plot_topic_countplot
-from typing import Tuple
+from src.logger import get_logger
+import src.pr_opps as PR_Analyser
+
+logger = get_logger(__name__)
 
 style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_color='#E7F4FF', border_size_px=0, border_radius_px=6)
 
@@ -39,9 +40,8 @@ style_metric_cards(box_shadow=False, border_left_color='#E7F4FF',background_colo
 # changes. The function only re‑runs if the **file contents** change.
 # -----------------------------------------------------------------------------
 
-@st.cache_resource
 def load_heartfelt_predictor():
-    model_path = os.path.join("src", "models", "heartfelt_pipeline.joblib")
+    model_path = "src/models/heartfelt_pipeline.joblib"
     return joblib.load(model_path)
 
 @st.cache_resource
@@ -58,13 +58,11 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     df_orig = pd.read_csv(BytesIO(raw_csv))
     df_orig.columns = df_orig.columns.str.lower().str.replace(' ', '_')
 
-    print(df_orig.columns)
-
     # Detect freeform column
     freeform_col = detect_freeform_col(df_orig)
     id_col = detect_id_col(df_orig)
     school_type_col = detect_school_type_col(df_orig)
-    print(id_col)
+    logger.info(id_col)
 
     df_orig = df_orig[df_orig[freeform_col].notna()]
 
@@ -88,7 +86,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     
     # Usage Extraction
     docs = df_orig[freeform_col].to_list()
-    scored['usage'] = extract_usage(docs)
+    scored['usage'] = [tuple(l) for l in extract_usage(docs)]
 
     return scored, freeform_col, id_col
 
@@ -104,8 +102,18 @@ def compute_shortlist(df: pd.DataFrame) -> pd.DataFrame:
     """Pre‑compute shortlist_score for all rows (used for both modes)."""
     return shortlist_applications(df, k=len(df))
 
+@st.cache_data(show_spinner=True)
+def analyse_pr_opps(
+        shortlisted_apps_df: pd.DataFrame,
+        freeform_col: str,
+        id_col: str
+        ) -> pd.DataFrame:
+
+    return PR_Analyser.analyse(shortlisted_apps_df, freeform_col, id_col)
+
+
 @st.cache_data
-def apply_filters(df: pd.DataFrame, auto_short_df: pd.DataFrame, 
+def apply_filters(df: pd.DataFrame, auto_shortlist_df: pd.DataFrame, 
                   selected_view: str, filter_range: tuple, selected_topics: list) -> pd.DataFrame:
     """
     Cache filtering operations to avoid recomputing on every interaction.
@@ -116,7 +124,7 @@ def apply_filters(df: pd.DataFrame, auto_short_df: pd.DataFrame,
 
     def filter_not_shortlisted():
         return df[
-            (~df.index.isin(auto_short_df.index)) &
+            (~df.index.isin(auto_shortlist_df.index)) &
             (df['necessity_index'].between(filter_range[0], filter_range[1]))
         ]
 
@@ -202,9 +210,8 @@ def run_topic_modeling(_df: pd.DataFrame, freeform_col: str, _file_hash: str):
         return topic_model, topics, probs, mappings
 
     except Exception as e:
-        st.error(f"Topic modeling failed: {e}")
-        st.code(traceback.format_exc())
-        return None, None, None, None
+        logger.error(f"Topic modeling failed: {e}")
+        raise
 
 ################################
 # MAIN APP SCRIPT
@@ -230,30 +237,40 @@ else:
 if raw is None:
     st.stop()
 
-## ====== DATA PROCESSING ======
+## ============== DATA PROCESSING ================
 
-df, freeform_col, id_col = load_and_process(raw) # from cached function
-file_hash = st.session_state["current_file_hash"]
-topic_model, topics, probs, mappings = run_topic_modeling(df, freeform_col, file_hash)
+try:
+    logger.info("🧪 APPLICATION ANALYSIS STARTED")
+    df, freeform_col, id_col = load_and_process(raw) # from cached function
+    file_hash = st.session_state["current_file_hash"]
+    logger.info(f"Preprocessing successful. Identified {freeform_col} as freeform column and {id_col} as application ID column")
+    
+except Exception as e:
+    logger.error(f"Error preprocessing file: {str(e)}")
 
-if topic_model is None:
+try:
+    logger.info("Topic Modeling initiated")
+    topic_model, topics, probs, mappings = run_topic_modeling(df, freeform_col, file_hash)
+
+    label_map = (topic_model
+                 .get_topic_info()
+                 .set_index("Topic")["CustomName"]
+                 .to_dict())
+
+    df = topic_modeling_pipeline.attach_topics(df, mappings, topics, label_map, col="topics")
+
+    topics_df = (topic_model.get_topic_info()
+                 .query('Topic > -1')
+                 .drop(columns = ['Name', 'OpenAI'])
+                 .rename(columns = {'CustomName':'Topic Name', 'Topic':'Topic Nr.'})
+                 )
+
+    cols_to_move = ['Topic Nr.', 'Topic Name']
+    topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
+
+except Exception as e:
     st.error("⚠️  Topic modeling failed. Please check the error message above and try again.")
     st.stop()
-
-label_map = (topic_model
-             .get_topic_info()
-             .set_index("Topic")["CustomName"]
-             .to_dict())
-df = topic_modeling_pipeline.attach_topics(df, mappings, topics, label_map, col="topics")
-
-topics_df = (topic_model.get_topic_info()
-             .query('Topic > -1')
-             .drop(columns = ['Name', 'OpenAI'])
-             .rename(columns = {'CustomName':'Topic Name', 'Topic':'Topic Nr.'})
-             )
-
-cols_to_move = ['Topic Nr.', 'Topic Name']
-topics_df = topics_df[cols_to_move + [col for col in topics_df.columns if col not in cols_to_move]]
 
 book_candidates_df = df[df['book_candidates'] == True]
 
@@ -274,7 +291,7 @@ with st.sidebar:
     
     scored_full = compute_shortlist(df)
     threshold_score = scored_full["shortlist_score"].quantile(quantile_map[mode])
-    auto_short_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
+    auto_shortlist_df = scored_full[scored_full["shortlist_score"] >= threshold_score]
 
     st.title("Filters")
 
@@ -296,7 +313,7 @@ with st.sidebar:
     selected_topics = st.multiselect("Filter by Topic(s)", options=topic_options, default=[])
 
     # Use cached filtering function
-    filtered_df = apply_filters(df, auto_short_df, selected_view, filter_range, selected_topics)
+    filtered_df = apply_filters(df, auto_shortlist_df, selected_view, filter_range, selected_topics)
 
     st.markdown(f"**Total Applications:** {len(df)}")
     st.markdown(f"**Filtered Applications:** {len(filtered_df)}")
@@ -340,7 +357,7 @@ with tab1:
 
     st.header("Automatic Shortlist")
 
-    csv_auto = auto_short_df.to_csv(index=False).encode("utf-8")
+    csv_auto = auto_shortlist_df.to_csv(index=False).encode("utf-8")
     all_processed_data = df.to_csv(index=False).encode("utf-8")
     book_candidates = book_candidates_df.to_csv(index=False).encode("utf-8")
     topic_descriptions_csv = topics_df.to_csv(index=False).encode("utf-8")
@@ -373,7 +390,7 @@ with tab1:
     total_col, shortlistCounter_col, mode_col = st.columns(3)
 
     total_col.metric("Applications Submitted", len(df))
-    shortlistCounter_col.metric("Shorlist Length",  len(auto_short_df))
+    shortlistCounter_col.metric("Shorlist Length",  len(auto_shortlist_df))
     mode_col.metric("Mode", mode)
 
     shorltist_cols_to_show = [
@@ -390,7 +407,7 @@ with tab1:
             'topics',
             ]
 
-    st.dataframe(auto_short_df.loc[:, shorltist_cols_to_show], hide_index=True)
+    st.dataframe(auto_shortlist_df.loc[:, shorltist_cols_to_show], hide_index=True)
 
     ## ====== APPLICATIONS REVIEW =======
 
@@ -565,5 +582,20 @@ with tab2:
 #################################
 #   PR OPPORTUNITIES TAB
 #################################
+
+with tab3:
+
+    st.header("PR Opportunity Analysis")
+
+    # ------------ PROCESSING ------------
+
+    analysed_pr_apps_df = analyse_pr_opps(auto_shortlist_df, freeform_col, id_col)
+
+    st.dataframe(analysed_pr_apps_df, hide_index=True)
+
+
+
+
+
 
 
