@@ -92,7 +92,7 @@ All core criteria must be met in order for an application to be classified as fi
 
 Not essential but nice to have:
 
-1. **Local Setting:** Located within approximately 50-60 miles of Sheffield. Useful for highlighting schools suitable for in-person support and photo opportunities.
+1. **Local Setting:** Located within neighbouring towns of Sheffield (at most 60 miles, be conservative). Useful for highlighting schools suitable for in-person support and photo opportunities.
 
 # SUCESS EXAMPLES:
 
