@@ -1,6 +1,5 @@
 import re
 import pandas as pd
-from tabulate import tabulate
 
 def find_book_candidates(df: pd.DataFrame, freeform_column: str, school_type_column: str) -> pd.Series:
 
@@ -41,25 +40,4 @@ def find_book_candidates(df: pd.DataFrame, freeform_column: str, school_type_col
     return wants_books & is_allowed_school_type
 
 
-# ========== USAGE EXAMPLE ==========
 
-def main():
-    
-    df = pd.read_csv('data/raw/new-application-format-data.csv')
-
-    df['book_candidates'] = find_book_candidates(df, 'Application Info', 'School Type')
-
-    print(df.iloc[:,[0,1,2,-1]].sample(8).to_markdown(tablefmt='grid'))
-    print()
-    print(f"📚 TOTAL BOOK CANDIDATES = {len(df[df['book_candidates']])}")
-
-    samples = df[df['book_candidates']].sample(3)
-
-    print('\n' + "📄 SAMPLE CANDIDATES" + '\n')
-    for idx, row in samples.iterrows():
-        print(f"(ID: {row['App ID']}) {row['Application Info']}")
-        print()
-
-
-if __name__ == "__main__":
-    main()
