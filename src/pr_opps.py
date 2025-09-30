@@ -9,15 +9,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.prompts import PROMPTS
+from src.logger import get_logger
 
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # =============== PYDANTIC MODELS ============
 
 class ClassifiedApplication(BaseModel):
-    app_id: str = Field(..., description = "The ID of the application")
+    app_id: int = Field(..., description = "The ID of the application")
     fit_for_pr: bool = Field(..., description = "Whether the application is a viable candidate for PR opportunities or not")
     reasoning: str = Field(..., description = "The reasoning for your classification")
     near_sheffield: bool = Field(..., description = "Whether the school is within 50-60 miles of Sheffield, UK")
@@ -45,7 +44,6 @@ def format_application_texts(
 
     records = (
     shortlisted_apps[[id_col, freeform_col, 'postcode']]
-    .sample(10)
     .rename(columns={id_col: "id", freeform_col: "text"})
     .to_dict(orient="records")
     )
@@ -93,17 +91,33 @@ def analyse(
     try:
         logger.info("Attempting LLM classification...")
         response = call_llm(application_texts)
-        logger.info(f"Successfuly classified {len(response.applications)} candidates")
-        return response
+        # Use `response.model_dump_json(indent=2)` to stringify Pydantic object
+        logger.info(f"Successfuly classified {len(response.applications)} candidates for PR opportunities")
 
     except Exception as e:
         logger.error(f"Error with LLM classification for PR opportunity analysis: {str(e)}")
         raise
 
+    try:
+        classified_df = pd.DataFrame(response.model_dump()['applications']) # Pydantic-native conversion
+        classified_df = classified_df.loc[classified_df['fit_for_pr']] # filtering in place
+        classified_df = classified_df.merge(
+                shortlisted_apps[[freeform_col, id_col]],
+                left_on = 'app_id',
+                right_on = id_col,
+                how = 'left'
+        ).drop(columns=id_col)
+
+        return classified_df
+
+    except Exception as e:
+        logger.error(f"Error converting {type(response)} to DataFrame: {str(e)}")
+        return None 
         
 # =================== USAGE =================
 
 from src.column_detection import detect_freeform_col, detect_id_col, detect_school_type_col
+from tabulate import tabulate
 
 def main():
 
@@ -114,13 +128,11 @@ def main():
     freeform_col = detect_freeform_col(df)
     id_col = detect_id_col(df)
 
-    classified_apps_obj = analyse(df, freeform_col, id_col)
+    classified_apps_df = analyse(df, freeform_col, id_col)
 
-    print("AGENT RESPONSE \n")
-    print(classified_apps_obj.model_dump_json(indent=2))
-    print(type(classified_apps_obj))
-    print(len(classified_apps_obj.applications))
-
+    print(classified_apps_df.columns)
+    print(classified_apps_df.head(2))
+    print(type(classified_apps_df))
 
 if __name__ == '__main__':
     main()
