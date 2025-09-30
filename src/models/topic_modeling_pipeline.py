@@ -172,9 +172,9 @@ def attach_topics(
     # Group topics per row and make list of labels
     topics_list = (
         s.groupby("row")["topic"]
-        .agg(lambda ids: sorted({label_map.get(i, str(i)) for i in ids}))
+        .agg(lambda ids: tuple(sorted({label_map.get(i, str(i)) for i in ids})))
     )
 
     # Assign the lists to the column, fill missing with empty list
-    return df.assign(**{col: topics_list.reindex(df.index).apply(lambda x: x if isinstance(x, list) else [])})
+    return df.assign(**{col: topics_list.reindex(df.index).apply(lambda x: x if isinstance(x, tuple) else tuple())})
 
