@@ -44,7 +44,7 @@ def format_application_texts(
 
     records = (
     shortlisted_apps[[id_col, freeform_col, 'postcode']]
-    .rename(columns={id_col: "id", freeform_col: "text"})
+    .rename(columns={id_col: "app_id", freeform_col: "text"})
     .to_dict(orient="records")
     )
 
@@ -100,13 +100,12 @@ def analyse(
 
     try:
         classified_df = pd.DataFrame(response.model_dump()['applications']) # Pydantic-native conversion
-        classified_df = classified_df.loc[classified_df['fit_for_pr']] # filtering in place
         classified_df = classified_df.merge(
                 shortlisted_apps[[freeform_col, id_col]],
                 left_on = 'app_id',
                 right_on = id_col,
                 how = 'left'
-        ).drop(columns=id_col)
+        )
 
         return classified_df
 
@@ -121,7 +120,7 @@ from tabulate import tabulate
 
 def main():
 
-    df = pd.read_csv('./data/raw/old_application_format/april-data.csv')
+    df = pd.read_csv('./data/raw/head10_sample.csv')
 
     df.columns = df.columns.str.lower().str.replace(' ', '_')
 
