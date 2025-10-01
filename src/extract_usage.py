@@ -10,7 +10,7 @@ load_dotenv()
 logger = get_logger(__name__)
 
 def extract_usage(docs, max_concurrency: int = 110) -> List[List[str]]:
-    logger.info(f"Starting extract_usage function with {len(docs)} documents and max_concurrency={max_concurrency}")
+    logger.info(f"Extracting usage items for {len(docs)} documents using AI (max_concurrency={max_concurrency})")
 
     try:
 
