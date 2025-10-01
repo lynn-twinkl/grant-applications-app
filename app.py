@@ -65,6 +65,7 @@ def load_and_process(raw_csv: bytes) -> Tuple[pd.DataFrame, str]:
     logger.info(id_col)
 
     df_orig = df_orig[df_orig[freeform_col].notna()]
+    df_orig = df_orig.assign(**{id_col: df_orig[id_col].astype(int)})
 
     #Word Count
     df_orig['word_count'] = df_orig[freeform_col].fillna('').str.split().str.len()
@@ -591,11 +592,18 @@ with tab3:
 
     analysed_pr_apps_df = analyse_pr_opps(auto_shortlist_df, freeform_col, id_col)
 
-    st.dataframe(analysed_pr_apps_df, hide_index=True)
+    pr_opps_csv = analysed_pr_apps_df.to_csv(index=False).encode('utf-8')
 
+    st.download_button(
+            "Download PR Analysis",
+            data=pr_opps_csv,
+            file_name="pr_opportunities.csv",
+            mime="text/csv",
+            icon="⬇️",
+    )
 
-
-
-
-
+    st.dataframe(
+            analysed_pr_apps_df.loc[analysed_pr_apps_df['fit_for_pr']].drop(columns='fit_for_pr'),
+            hide_index=True
+    )
 
